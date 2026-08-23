@@ -1,0 +1,28 @@
+{
+  "name": "gistoneer-functions",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "24"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions,firestore,auth",
+    "shell": "npm run build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "deploy:functions": "firebase deploy --only functions --account gistoneer@gmail.com",
+    "deploy:firestore": "firebase deploy --only firestore:rules --account gistoneer@gmail.com",
+    "logs": "firebase functions:log",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.1.1",
+    "resend": "^4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
