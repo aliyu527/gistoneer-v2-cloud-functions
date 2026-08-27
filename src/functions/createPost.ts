@@ -24,6 +24,8 @@ interface CreatePostRequest {
   audience: Audience;
   allowComments: boolean;
   location?: {name?: string};
+  /** Idempotency key from the client's upload queue — stable across every retry of the same publish attempt. */
+  clientPostId?: string;
 }
 
 interface PostMedia {
@@ -83,6 +85,31 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
     }
     const uid = request.auth.uid;
     const data = request.data ?? ({} as CreatePostRequest);
+
+    // Idempotency: the client's upload queue sends the same clientPostId on
+    // every retry of a given publish attempt. If a doc with that id already
+    // exists and belongs to this user, a previous call already succeeded —
+    // return that result instead of writing a duplicate post (mirrors
+    // confirmMediaUpload's own early-return-if-already-done pattern). No
+    // clientPostId (any other caller) falls back to today's auto-ID write.
+    const clientPostId =
+      typeof data.clientPostId === 'string' && data.clientPostId.length > 0 && data.clientPostId.length <= 200
+        ? data.clientPostId
+        : undefined;
+    if (clientPostId) {
+      const existing = await db.collection('posts').doc(clientPostId).get();
+      if (existing.exists) {
+        const existingData = existing.data()!;
+        if (existingData.authorId !== uid) {
+          // Practically unreachable (clientPostId is a random client-generated
+          // string) — but if it ever collided with someone else's post, don't
+          // confirm that to the caller. Same "not-found" posture confirmMediaUpload
+          // uses for a record that exists but belongs to someone else.
+          throw new HttpsError('invalid-argument', 'Something went wrong. Please try again.');
+        }
+        return {postId: existing.id};
+      }
+    }
 
     const caption = (data.caption ?? '').trim();
     if (caption.length > MAX_CAPTION_LENGTH) {
@@ -156,7 +183,7 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
     if (userData.displayName) author.displayName = userData.displayName;
     if (userData.photoURL) author.avatarUrl = userData.photoURL;
 
-    const ref = db.collection('posts').doc();
+    const ref = clientPostId ? db.collection('posts').doc(clientPostId) : db.collection('posts').doc();
     await ref.set({
       id: ref.id,
       authorId: uid,
