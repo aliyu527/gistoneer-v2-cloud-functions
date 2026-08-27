@@ -61,12 +61,14 @@ export const verifyEmailVerificationCode = onCall<
     throw new HttpsError('invalid-argument', 'That code is incorrect. Please try again.');
   }
 
-  // Single-use: invalidate immediately on success.
-  await docRef.delete();
-
   if (purpose === 'reset') {
     // docKey is the uid directly (set by passwordRecoveryStart) — no lookup needed.
     const customToken = await auth.createCustomToken(docKey);
+    // Single-use: invalidate only after the token was actually minted, so a
+    // mint failure (e.g. a transient IAM/quota issue) doesn't burn an
+    // otherwise-valid code — the user can just retry instead of the code
+    // silently vanishing and looking "expired" on the next attempt.
+    await docRef.delete();
     return {customToken};
   }
 
@@ -83,5 +85,6 @@ export const verifyEmailVerificationCode = onCall<
   }
 
   const customToken = await auth.createCustomToken(uid);
+  await docRef.delete();
   return {customToken};
 });
