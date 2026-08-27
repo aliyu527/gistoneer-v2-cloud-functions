@@ -20,3 +20,18 @@ export const RESEND_WEBHOOK_SECRET = defineSecret('RESEND_WEBHOOK_SECRET');
 // reserves the FIREBASE_/X_GOOGLE_/EXT_ env var prefixes and refuses to
 // deploy if a .env key starts with one.
 export const WEB_API_KEY = defineString('WEB_API_KEY');
+
+// AWS S3 media upload pipeline (Module 2). The access key/secret are real
+// secrets — never put them in the mobile app or source control.
+//   firebase functions:secrets:set AWS_ACCESS_KEY_ID
+//   firebase functions:secrets:set AWS_SECRET_ACCESS_KEY
+// Region/bucket aren't secret — set via functions/.env:
+//   AWS_REGION=us-east-1
+//   AWS_S3_ALBUM_BUCKET=your-post-media-bucket-name
+// Named ALBUM specifically — the project's AWS setup already separates
+// buckets by purpose (avatar/cover/album); post media (this module) goes to
+// the album bucket, not the generic/avatar/cover ones.
+export const AWS_ACCESS_KEY_ID = defineSecret('AWS_ACCESS_KEY_ID');
+export const AWS_SECRET_ACCESS_KEY = defineSecret('AWS_SECRET_ACCESS_KEY');
+export const AWS_REGION = defineString('AWS_REGION');
+export const AWS_S3_ALBUM_BUCKET = defineString('AWS_S3_ALBUM_BUCKET');

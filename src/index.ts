@@ -7,3 +7,5 @@ export {setAccountPassword} from './functions/setAccountPassword';
 export {passwordRecoveryStart} from './functions/passwordRecoveryStart';
 export {signInWithUsername} from './functions/signInWithUsername';
 export {resendWebhook} from './functions/resendWebhook';
+export {createMediaUploadUrl} from './functions/createMediaUploadUrl';
+export {confirmMediaUpload} from './functions/confirmMediaUpload';
