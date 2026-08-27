@@ -9,3 +9,4 @@ export {signInWithUsername} from './functions/signInWithUsername';
 export {resendWebhook} from './functions/resendWebhook';
 export {createMediaUploadUrl} from './functions/createMediaUploadUrl';
 export {confirmMediaUpload} from './functions/confirmMediaUpload';
+export {createPost} from './functions/createPost';
