@@ -9,6 +9,9 @@ const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
 const MAX_LOCATION_NAME_LENGTH = 100;
 const AUDIENCES = ['public', 'followers', 'private'] as const;
 type Audience = (typeof AUDIENCES)[number];
+const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG'] as const;
+type SoundSource = (typeof SOUND_SOURCES)[number];
+const MAX_SOUND_TITLE_LENGTH = 200;
 
 interface CreatePostMediaInput {
   uploadId: string;
@@ -16,6 +19,19 @@ interface CreatePostMediaInput {
   width?: number;
   height?: number;
   duration?: number;
+}
+
+interface CreatePostSoundInput {
+  trackId?: string;
+  source?: SoundSource;
+  title?: string;
+  artist?: string;
+  provider?: string;
+  providerTrackId?: string;
+  startOffsetMs?: number;
+  durationMs?: number;
+  volume?: number;
+  deviceUploadId?: string;
 }
 
 interface CreatePostRequest {
@@ -26,6 +42,21 @@ interface CreatePostRequest {
   location?: {name?: string};
   /** Idempotency key from the client's upload queue — stable across every retry of the same publish attempt. */
   clientPostId?: string;
+  sound?: CreatePostSoundInput;
+}
+
+interface PostSound {
+  trackId: string;
+  source: SoundSource;
+  title: string;
+  artist?: string;
+  provider?: string;
+  providerTrackId?: string;
+  startOffsetMs: number;
+  durationMs: number;
+  volume: number;
+  /** Public URL, resolved server-side from the verified upload — never the client-supplied uploadId directly. */
+  deviceAudioUrl?: string;
 }
 
 interface PostMedia {
@@ -51,7 +82,7 @@ async function verifyUpload(uploadId: string, uid: string) {
   const data = snap.data()!;
   if (data.uid !== uid || data.status !== 'uploaded') return null;
   return data as {
-    mediaType: 'image' | 'video';
+    mediaType: 'image' | 'video' | 'audio';
     mimeType: string;
     fileSize: number;
     storageKey: string;
@@ -164,6 +195,49 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       });
     }
 
+    let sound: PostSound | undefined;
+    if (data.sound) {
+      const s = data.sound;
+      if (
+        typeof s.trackId === 'string' &&
+        s.trackId.length > 0 &&
+        s.source &&
+        SOUND_SOURCES.includes(s.source) &&
+        typeof s.title === 'string' &&
+        s.title.length > 0 &&
+        s.title.length <= MAX_SOUND_TITLE_LENGTH &&
+        Number.isFinite(s.startOffsetMs) &&
+        (s.startOffsetMs ?? -1) >= 0 &&
+        Number.isFinite(s.durationMs) &&
+        (s.durationMs ?? 0) > 0 &&
+        Number.isFinite(s.volume)
+      ) {
+        let deviceAudioUrl: string | undefined;
+        if (s.deviceUploadId) {
+          const audioUpload = await verifyUpload(s.deviceUploadId, uid);
+          if (audioUpload && audioUpload.mediaType === 'audio') {
+            deviceAudioUrl = buildPublicUrl(audioUpload.storageKey, audioUpload.bucket, audioUpload.region);
+          }
+        }
+        sound = {
+          trackId: s.trackId,
+          source: s.source,
+          title: s.title,
+          ...(s.artist ? {artist: s.artist} : {}),
+          ...(s.provider ? {provider: s.provider} : {}),
+          ...(s.providerTrackId ? {providerTrackId: s.providerTrackId} : {}),
+          startOffsetMs: s.startOffsetMs!,
+          durationMs: s.durationMs!,
+          volume: Math.max(0, Math.min(1, s.volume!)),
+          ...(deviceAudioUrl ? {deviceAudioUrl} : {}),
+        };
+      }
+      // An invalid/unverifiable sound payload is silently dropped rather
+      // than failing the whole publish — sound is a metadata enrichment,
+      // not a required field (mirrors how thumbnailUploadId degrades
+      // gracefully above).
+    }
+
     const hashtags = [...new Set(extractTokens(caption, /#([\p{L}\p{N}_]+)/gu).map(normalizeHashtag).filter((h): h is string => h !== null))];
 
     const mentionCandidates = [...new Set(extractTokens(caption, /@(\w+)/g).map(normalizeUsername).filter((m): m is string => m !== null))];
@@ -195,6 +269,7 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       audience: data.audience,
       allowComments: data.allowComments,
       ...(location ? {location} : {}),
+      ...(sound ? {sound} : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       status: 'published',

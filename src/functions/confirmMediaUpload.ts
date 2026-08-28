@@ -13,7 +13,7 @@ interface ConfirmMediaUploadResponse {
   bucket: string;
   region: string;
   mimeType: string;
-  mediaType: 'image' | 'video';
+  mediaType: 'image' | 'video' | 'audio';
   fileName: string | null;
   fileSize: number;
   uploadedAt: string;
