@@ -11,3 +11,7 @@ export {createMediaUploadUrl} from './functions/createMediaUploadUrl';
 export {confirmMediaUpload} from './functions/confirmMediaUpload';
 export {deleteMediaUpload} from './functions/deleteMediaUpload';
 export {createPost} from './functions/createPost';
+export {searchSounds} from './functions/sounds/searchSounds';
+export {getSoundCatalogHome} from './functions/sounds/getSoundCatalogHome';
+export {getSoundsByGenre} from './functions/sounds/getSoundsByGenre';
+export {getSoundDetail} from './functions/sounds/getSoundDetail';

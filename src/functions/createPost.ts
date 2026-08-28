@@ -3,6 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 import {buildPublicUrl} from '../lib/s3';
 import {normalizeHashtag, normalizeUsername} from '../lib/normalize';
+import {getSoundDetail} from '../sounds/service';
 
 const MAX_CAPTION_LENGTH = 2200; // matches the client's own TextInput maxLength
 const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
@@ -57,6 +58,10 @@ interface PostSound {
   volume: number;
   /** Public URL, resolved server-side from the verified upload — never the client-supplied uploadId directly. */
   deviceAudioUrl?: string;
+  /** Only present for source: 'CATALOG' — the server's own trusted license/attribution, never the client's copy. */
+  licenseStatus?: string;
+  attributionRequired?: boolean;
+  attributionText?: string;
 }
 
 interface PostMedia {
@@ -231,11 +236,45 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
           volume: Math.max(0, Math.min(1, s.volume!)),
           ...(deviceAudioUrl ? {deviceAudioUrl} : {}),
         };
+
+        // A catalog sound's rights are server-trusted, never the client's
+        // claim (spec §9/§73-74) — re-look-up the track and reject the
+        // whole publish (not a silent drop) if it's missing, unavailable,
+        // restricted, or territory-restricted. On success, overwrite title/
+        // artist/attribution with the server's own record rather than
+        // whatever the client sent.
+        if (s.source === 'CATALOG' && s.providerTrackId) {
+          const track = await getSoundDetail(s.providerTrackId);
+          const blocked =
+            !track ||
+            !track.isAvailable ||
+            track.license.status === 'unavailable' ||
+            track.license.status === 'territoryRestricted' ||
+            track.license.status === 'restricted';
+          if (blocked) {
+            throw new HttpsError('failed-precondition', "This sound can't be used for this post.");
+          }
+          sound = {
+            trackId: sound.trackId,
+            source: sound.source,
+            title: track.title,
+            ...(track.artist ? {artist: track.artist} : {}),
+            ...(sound.provider ? {provider: sound.provider} : {}),
+            ...(sound.providerTrackId ? {providerTrackId: sound.providerTrackId} : {}),
+            startOffsetMs: sound.startOffsetMs,
+            durationMs: sound.durationMs,
+            volume: sound.volume,
+            licenseStatus: track.license.status,
+            ...(track.license.attributionRequired ? {attributionRequired: true} : {}),
+            ...(track.license.attributionText ? {attributionText: track.license.attributionText} : {}),
+          };
+        }
       }
-      // An invalid/unverifiable sound payload is silently dropped rather
-      // than failing the whole publish — sound is a metadata enrichment,
-      // not a required field (mirrors how thumbnailUploadId degrades
-      // gracefully above).
+      // A non-catalog sound with an invalid/incomplete payload is silently
+      // dropped rather than failing the whole publish — it's metadata
+      // enrichment, not a required field (mirrors thumbnailUploadId's own
+      // graceful-degradation above). A CATALOG sound that fails validation
+      // above throws instead, per spec §74's explicit "do not silently publish."
     }
 
     const hashtags = [...new Set(extractTokens(caption, /#([\p{L}\p{N}_]+)/gu).map(normalizeHashtag).filter((h): h is string => h !== null))];
