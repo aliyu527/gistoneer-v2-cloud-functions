@@ -10,9 +10,14 @@ const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
 const MAX_LOCATION_NAME_LENGTH = 100;
 const AUDIENCES = ['public', 'followers', 'private'] as const;
 type Audience = (typeof AUDIENCES)[number];
-const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG'] as const;
+const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG', 'RECORDING'] as const;
 type SoundSource = (typeof SOUND_SOURCES)[number];
+const AUDIO_LAYER_TYPES = ['music', 'voiceover', 'soundEffect'] as const;
+type AudioLayerType = (typeof AUDIO_LAYER_TYPES)[number];
+const DUCKING_LEVELS = ['off', 'low', 'medium', 'strong'] as const;
+type DuckingLevel = (typeof DUCKING_LEVELS)[number];
 const MAX_SOUND_TITLE_LENGTH = 200;
+const MAX_AUDIO_LAYERS = 12;
 
 interface CreatePostMediaInput {
   uploadId: string;
@@ -22,16 +27,21 @@ interface CreatePostMediaInput {
   duration?: number;
 }
 
-interface CreatePostSoundInput {
+interface CreatePostAudioLayerInput {
+  type?: AudioLayerType;
   trackId?: string;
   source?: SoundSource;
   title?: string;
   artist?: string;
   provider?: string;
   providerTrackId?: string;
+  startTimeMs?: number;
   startOffsetMs?: number;
   durationMs?: number;
   volume?: number;
+  muted?: boolean;
+  fadeInMs?: number;
+  fadeOutMs?: number;
   deviceUploadId?: string;
 }
 
@@ -43,19 +53,25 @@ interface CreatePostRequest {
   location?: {name?: string};
   /** Idempotency key from the client's upload queue — stable across every retry of the same publish attempt. */
   clientPostId?: string;
-  sound?: CreatePostSoundInput;
+  layers?: CreatePostAudioLayerInput[];
+  duckingLevel?: DuckingLevel;
 }
 
-interface PostSound {
+interface PostAudioLayer {
+  type: AudioLayerType;
   trackId: string;
   source: SoundSource;
   title: string;
   artist?: string;
   provider?: string;
   providerTrackId?: string;
+  startTimeMs: number;
   startOffsetMs: number;
   durationMs: number;
   volume: number;
+  muted: boolean;
+  fadeInMs: number;
+  fadeOutMs: number;
   /** Public URL, resolved server-side from the verified upload — never the client-supplied uploadId directly. */
   deviceAudioUrl?: string;
   /** Only present for source: 'CATALOG' — the server's own trusted license/attribution, never the client's copy. */
@@ -200,23 +216,36 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       });
     }
 
-    let sound: PostSound | undefined;
-    if (data.sound) {
-      const s = data.sound;
-      if (
-        typeof s.trackId === 'string' &&
-        s.trackId.length > 0 &&
-        s.source &&
-        SOUND_SOURCES.includes(s.source) &&
-        typeof s.title === 'string' &&
-        s.title.length > 0 &&
-        s.title.length <= MAX_SOUND_TITLE_LENGTH &&
-        Number.isFinite(s.startOffsetMs) &&
-        (s.startOffsetMs ?? -1) >= 0 &&
-        Number.isFinite(s.durationMs) &&
-        (s.durationMs ?? 0) > 0 &&
-        Number.isFinite(s.volume)
-      ) {
+    const layers: PostAudioLayer[] = [];
+    if (Array.isArray(data.layers)) {
+      if (data.layers.length > MAX_AUDIO_LAYERS) {
+        throw new HttpsError('invalid-argument', `Posts can include at most ${MAX_AUDIO_LAYERS} audio clips.`);
+      }
+      for (const s of data.layers) {
+        const structurallyValid =
+          s.type &&
+          AUDIO_LAYER_TYPES.includes(s.type) &&
+          typeof s.trackId === 'string' &&
+          s.trackId.length > 0 &&
+          s.source &&
+          SOUND_SOURCES.includes(s.source) &&
+          typeof s.title === 'string' &&
+          s.title.length > 0 &&
+          s.title.length <= MAX_SOUND_TITLE_LENGTH &&
+          Number.isFinite(s.startTimeMs) &&
+          (s.startTimeMs ?? -1) >= 0 &&
+          Number.isFinite(s.startOffsetMs) &&
+          (s.startOffsetMs ?? -1) >= 0 &&
+          Number.isFinite(s.durationMs) &&
+          (s.durationMs ?? 0) > 0 &&
+          Number.isFinite(s.volume);
+        // An invalid/incomplete layer is silently dropped rather than
+        // failing the whole publish — it's metadata enrichment, not a
+        // required field (mirrors thumbnailUploadId's own graceful
+        // degradation above). A CATALOG layer that fails the license check
+        // below throws instead, per spec §74's explicit "do not silently publish."
+        if (!structurallyValid) continue;
+
         let deviceAudioUrl: string | undefined;
         if (s.deviceUploadId) {
           const audioUpload = await verifyUpload(s.deviceUploadId, uid);
@@ -224,27 +253,33 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
             deviceAudioUrl = buildPublicUrl(audioUpload.storageKey, audioUpload.bucket, audioUpload.region);
           }
         }
-        sound = {
-          trackId: s.trackId,
-          source: s.source,
-          title: s.title,
+
+        let layer: PostAudioLayer = {
+          type: s.type!,
+          trackId: s.trackId!,
+          source: s.source!,
+          title: s.title!,
           ...(s.artist ? {artist: s.artist} : {}),
           ...(s.provider ? {provider: s.provider} : {}),
           ...(s.providerTrackId ? {providerTrackId: s.providerTrackId} : {}),
+          startTimeMs: s.startTimeMs!,
           startOffsetMs: s.startOffsetMs!,
           durationMs: s.durationMs!,
           volume: Math.max(0, Math.min(1, s.volume!)),
+          muted: s.muted === true,
+          fadeInMs: Number.isFinite(s.fadeInMs) ? Math.max(0, s.fadeInMs!) : 0,
+          fadeOutMs: Number.isFinite(s.fadeOutMs) ? Math.max(0, s.fadeOutMs!) : 0,
           ...(deviceAudioUrl ? {deviceAudioUrl} : {}),
         };
 
-        // A catalog sound's rights are server-trusted, never the client's
+        // A catalog layer's rights are server-trusted, never the client's
         // claim (spec §9/§73-74) — re-look-up the track and reject the
         // whole publish (not a silent drop) if it's missing, unavailable,
         // restricted, or territory-restricted. On success, overwrite title/
         // artist/attribution with the server's own record rather than
         // whatever the client sent.
-        if (s.source === 'CATALOG' && s.providerTrackId) {
-          const track = await getSoundDetail(s.providerTrackId);
+        if (layer.source === 'CATALOG' && layer.providerTrackId) {
+          const track = await getSoundDetail(layer.providerTrackId);
           const blocked =
             !track ||
             !track.isAvailable ||
@@ -254,28 +289,32 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
           if (blocked) {
             throw new HttpsError('failed-precondition', "This sound can't be used for this post.");
           }
-          sound = {
-            trackId: sound.trackId,
-            source: sound.source,
+          layer = {
+            type: layer.type,
+            trackId: layer.trackId,
+            source: layer.source,
             title: track.title,
             ...(track.artist ? {artist: track.artist} : {}),
-            ...(sound.provider ? {provider: sound.provider} : {}),
-            ...(sound.providerTrackId ? {providerTrackId: sound.providerTrackId} : {}),
-            startOffsetMs: sound.startOffsetMs,
-            durationMs: sound.durationMs,
-            volume: sound.volume,
+            ...(layer.provider ? {provider: layer.provider} : {}),
+            ...(layer.providerTrackId ? {providerTrackId: layer.providerTrackId} : {}),
+            startTimeMs: layer.startTimeMs,
+            startOffsetMs: layer.startOffsetMs,
+            durationMs: layer.durationMs,
+            volume: layer.volume,
+            muted: layer.muted,
+            fadeInMs: layer.fadeInMs,
+            fadeOutMs: layer.fadeOutMs,
             licenseStatus: track.license.status,
             ...(track.license.attributionRequired ? {attributionRequired: true} : {}),
             ...(track.license.attributionText ? {attributionText: track.license.attributionText} : {}),
           };
         }
+
+        layers.push(layer);
       }
-      // A non-catalog sound with an invalid/incomplete payload is silently
-      // dropped rather than failing the whole publish — it's metadata
-      // enrichment, not a required field (mirrors thumbnailUploadId's own
-      // graceful-degradation above). A CATALOG sound that fails validation
-      // above throws instead, per spec §74's explicit "do not silently publish."
     }
+
+    const duckingLevel: DuckingLevel = data.duckingLevel && DUCKING_LEVELS.includes(data.duckingLevel) ? data.duckingLevel : 'off';
 
     const hashtags = [...new Set(extractTokens(caption, /#([\p{L}\p{N}_]+)/gu).map(normalizeHashtag).filter((h): h is string => h !== null))];
 
@@ -308,7 +347,7 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       audience: data.audience,
       allowComments: data.allowComments,
       ...(location ? {location} : {}),
-      ...(sound ? {sound} : {}),
+      ...(layers.length > 0 ? {layers, duckingLevel} : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       status: 'published',
