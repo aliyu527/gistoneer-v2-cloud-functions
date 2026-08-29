@@ -1,4 +1,4 @@
-import {S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3';
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_S3_ALBUM_BUCKET} from '../config';
 
@@ -75,6 +75,19 @@ export async function headObject(key: string): Promise<{sizeBytes: number} | nul
     if (code === 'NotFound' || code === 'NoSuchKey') return null;
     throw err;
   }
+}
+
+/**
+ * Fetches an object's full bytes (createSound uses this to read a just-
+ * uploaded audio file for tag extraction — audio uploads are capped at
+ * 20MB, comfortably within a Cloud Function's memory/time budget).
+ * `transformToByteArray()` is the SDK's own cross-runtime way to drain the
+ * response body, rather than hand-rolling Readable/stream handling.
+ */
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const result = await getClient().send(new GetObjectCommand({Bucket: getBucketName(), Key: key}));
+  const bytes = await result.Body!.transformToByteArray();
+  return Buffer.from(bytes);
 }
 
 /** S3 DeleteObject is itself idempotent — deleting an already-gone (or never-uploaded) key succeeds silently. */
