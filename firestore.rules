@@ -73,6 +73,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // sounds/{soundId} — user-uploaded personal sound library (Music Studio
+    // Module 2). Entirely server-written: createSound re-verifies the
+    // referenced mediaUploads record (owner, confirmed status, audio type)
+    // before writing, so a client-side write could never be trusted to do
+    // that correctly — same posture as mediaUploads/posts above. Read access
+    // is owner-only for now (every sound defaults to private visibility);
+    // a future module can widen this once public sound sharing is real.
+    match /sounds/{soundId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      allow write: if false;
+    }
+
     // templateFavorites/{uid_templateId} — Module 8. Entirely server-written
     // (favoriteTemplate/unfavoriteTemplate Cloud Functions); the client never
     // reads this collection directly either — getFavoriteTemplates/
