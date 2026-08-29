@@ -85,6 +85,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // playlists/{playlistId} — user-curated sound collections (Music Studio
+    // Module 6). Entirely server-written: createPlaylist/updatePlaylist
+    // re-verify every referenced soundId actually belongs to the caller
+    // (verifyOwnedSoundIds) before writing, so a client-side write could
+    // never be trusted to do that correctly — same posture as sounds above.
+    // Read follows the same public/private pattern posts already uses:
+    // 'public' playlists are readable by any signed-in user, 'private' ones
+    // are owner-only.
+    match /playlists/{playlistId} {
+      allow read: if request.auth != null
+        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid);
+      allow write: if false;
+    }
+
     // templateFavorites/{uid_templateId} — Module 8. Entirely server-written
     // (favoriteTemplate/unfavoriteTemplate Cloud Functions); the client never
     // reads this collection directly either — getFavoriteTemplates/
