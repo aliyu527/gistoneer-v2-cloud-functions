@@ -9,6 +9,7 @@ interface CreateMediaUploadUrlRequest {
   mediaType: MediaType;
   mimeType: string;
   fileSize: number;
+  mediaFolderId: string;
   fileName?: string;
 }
 
@@ -32,15 +33,18 @@ export const createMediaUploadUrl = onCall<CreateMediaUploadUrlRequest, Promise<
     }
     const uid = request.auth.uid;
 
-    const {mediaType, mimeType, fileSize, fileName} = request.data ?? {};
-    const validationError = validateUploadRequest({mediaType, mimeType, fileSize, fileName});
+    const {mediaType, mimeType, fileSize, mediaFolderId, fileName} = request.data ?? {};
+    const validationError = validateUploadRequest({mediaType, mimeType, fileSize, mediaFolderId, fileName});
     if (validationError) {
       throw new HttpsError('invalid-argument', validationError);
     }
 
     const uploadId = randomUUID();
     const extension = extensionForMimeType(mimeType);
-    const storageKey = `media/users/${uid}/uploads/${uploadId}/original/${randomUUID()}.${extension}`;
+    // One folder per post — every file for a post (photo, video, thumbnail,
+    // sound) shares mediaFolderId, generated once client-side. mediaType
+    // prefixes the filename so the folder's contents are self-describing.
+    const storageKey = `${mediaFolderId}/${mediaType}-${randomUUID()}.${extension}`;
 
     const uploadUrl = await generatePresignedPutUrl(storageKey, mimeType);
 
@@ -51,6 +55,7 @@ export const createMediaUploadUrl = onCall<CreateMediaUploadUrlRequest, Promise<
       mimeType,
       fileSize,
       fileName: fileName ?? null,
+      mediaFolderId,
       storageKey,
       bucket: getBucketName(),
       region: getRegion(),

@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid} — the app's profile document.
+    // Server-controlled fields (uid, phoneVerified, emailVerified, authProviders,
+    // username, usernameLower, onboardingCompleted, createdAt) are only ever
+    // written by Cloud Functions via the Admin SDK, which bypasses these rules
+    // entirely. Client writes here are limited to a narrow, non-sensitive
+    // allowlist so a signed-in user can update their own display info.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      allow create: if false; // profile creation happens server-side (completeUserProfile)
+
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'photoURL', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // usernames/{usernameLower} — reservation records. Uniqueness is enforced
+    // by a Cloud Functions transaction (reserveUsername); the client never
+    // writes here directly, which is what prevents the check-then-write race
+    // and arbitrary username squatting/overwriting.
+    match /usernames/{usernameLower} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // emailVerifications/{email} — short-lived OTP records (hashed code,
+    // expiry, attempt count). Never client-readable or writable: leaking
+    // this would leak the hash and metadata needed to brute-force the code.
+    match /emailVerifications/{email} {
+      allow read, write: if false;
+    }
+
+    // suppressedEmails/{email} — addresses Resend reported as bounced/
+    // complained (written by the resendWebhook function via Admin SDK).
+    // Client access would leak deliverability signals about arbitrary
+    // addresses, so it's server-only like the collections above.
+    match /suppressedEmails/{email} {
+      allow read, write: if false;
+    }
+
+    // mediaUploads/{uploadId} — S3 upload authorization/status records
+    // (Module 2). Entirely server-written: createMediaUploadUrl creates it,
+    // confirmMediaUpload flips status to 'uploaded' after verifying the
+    // object actually landed in S3. A client marking its own upload
+    // "uploaded" would defeat that verification, so writes are server-only
+    // like emailVerifications/usernames above. Read access lets a user see
+    // their own upload's status; the owning uid is on the document itself.
+    match /mediaUploads/{uploadId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // posts/{postId} — published posts (Module 6). Entirely server-written:
+    // createPost re-verifies every referenced media upload and resolves
+    // mentions before writing, which a client-side write could never be
+    // trusted to do correctly, so writes are server-only like the
+    // collections above. Read access follows the post's own audience field:
+    // 'public' posts are readable by any signed-in user; 'followers'/
+    // 'private' posts are author-only for now since no followers graph
+    // exists yet in this app — a deliberately conservative default (never
+    // leaks a restricted post) rather than a fabricated follower check.
+    match /posts/{postId} {
+      allow read: if request.auth != null
+        && (resource.data.audience == 'public' || resource.data.authorId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // templateFavorites/{uid_templateId} — Module 8. Entirely server-written
+    // (favoriteTemplate/unfavoriteTemplate Cloud Functions); the client never
+    // reads this collection directly either — getFavoriteTemplates/
+    // getTemplateDetail return favorite status/lists through the Admin SDK,
+    // same "client never touches Firestore directly" posture as every other
+    // collection here.
+    match /templateFavorites/{favoriteId} {
+      allow read, write: if false;
+    }
+
+    // templateUsage/{templateId} — Module 8. Real usage/favorite counters
+    // layered onto the mock template catalog's seed numbers (see
+    // functions/src/templates/service.ts) — server-only, same reasoning as
+    // templateFavorites above.
+    match /templateUsage/{templateId} {
+      allow read, write: if false;
+    }
+
+    // Default deny for anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
