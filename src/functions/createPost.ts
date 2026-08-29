@@ -10,7 +10,7 @@ const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
 const MAX_LOCATION_NAME_LENGTH = 100;
 const AUDIENCES = ['public', 'followers', 'private'] as const;
 type Audience = (typeof AUDIENCES)[number];
-const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG', 'RECORDING'] as const;
+const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG', 'RECORDING', 'LIBRARY'] as const;
 type SoundSource = (typeof SOUND_SOURCES)[number];
 const AUDIO_LAYER_TYPES = ['music', 'voiceover', 'soundEffect'] as const;
 type AudioLayerType = (typeof AUDIO_LAYER_TYPES)[number];
@@ -307,6 +307,39 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
             licenseStatus: track.license.status,
             ...(track.license.attributionRequired ? {attributionRequired: true} : {}),
             ...(track.license.attributionText ? {attributionText: track.license.attributionText} : {}),
+          };
+        }
+
+        // A LIBRARY layer references the caller's own uploaded sound
+        // (Music Studio Module 4) — same non-trust posture as CATALOG above:
+        // re-look-up the record server-side and overwrite title/artist/url
+        // from it, rather than believing whatever the client sent. trackId
+        // is the sounds/{soundId} doc id (see Services/Music/soundToTrack.ts
+        // on the client — a LIBRARY SoundTrack.id is always the sound's own
+        // Firestore id).
+        if (layer.source === 'LIBRARY') {
+          const soundSnap = await db.collection('sounds').doc(layer.trackId).get();
+          if (!soundSnap.exists || soundSnap.data()!.ownerId !== uid) {
+            throw new HttpsError('failed-precondition', "This sound can't be used for this post.");
+          }
+          const sound = soundSnap.data()!;
+          layer = {
+            type: layer.type,
+            trackId: layer.trackId,
+            source: layer.source,
+            title: sound.title,
+            ...(sound.artist ? {artist: sound.artist} : {}),
+            startTimeMs: layer.startTimeMs,
+            startOffsetMs: layer.startOffsetMs,
+            durationMs: layer.durationMs,
+            volume: layer.volume,
+            muted: layer.muted,
+            fadeInMs: layer.fadeInMs,
+            fadeOutMs: layer.fadeOutMs,
+            // Reuses the same field DEVICE/RECORDING layers store their
+            // resolved URL in — same purpose (a hosted, playable URL for a
+            // non-catalog layer), not a device-originated file specifically.
+            deviceAudioUrl: sound.audioUrl,
           };
         }
 

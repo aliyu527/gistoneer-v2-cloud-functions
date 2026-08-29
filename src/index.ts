@@ -13,6 +13,7 @@ export {deleteMediaUpload} from './functions/deleteMediaUpload';
 export {createPost} from './functions/createPost';
 export {createSound} from './functions/createSound';
 export {updateSound} from './functions/updateSound';
+export {deleteSound} from './functions/deleteSound';
 export {searchSounds} from './functions/sounds/searchSounds';
 export {getSoundCatalogHome} from './functions/sounds/getSoundCatalogHome';
 export {getSoundsByGenre} from './functions/sounds/getSoundsByGenre';

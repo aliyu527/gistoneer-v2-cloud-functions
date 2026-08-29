@@ -75,6 +75,10 @@ export const updateSound = onCall<UpdateSoundRequest, Promise<UpdateSoundRespons
         throw new HttpsError('failed-precondition', "That artwork hasn't finished uploading. Please try again.");
       }
       updates.artworkUrl = buildPublicUrl(upload.storageKey, upload.bucket, upload.region);
+      // Raw key, not just the derived URL — deleteSound needs this to clean
+      // up the artwork object directly, the same way it uses storagePath
+      // for the audio object.
+      updates.artworkStoragePath = upload.storageKey;
     }
 
     if (Object.keys(updates).length === 0) {
