@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {searchTemplates as searchTemplatesService} from '../../templates/service';
+import {clampLimit} from '../../lib/pagination';
 import type {GistoneerTemplate, Page} from '../../templates/types';
 
 interface SearchTemplatesRequest {
@@ -25,7 +26,7 @@ export const searchTemplates = onCall<SearchTemplatesRequest, Promise<Page<Gisto
     }
 
     try {
-      return await searchTemplatesService(query, {cursor, limit});
+      return await searchTemplatesService(query, {cursor, limit: clampLimit(limit)});
     } catch {
       throw new HttpsError('unavailable', "Couldn't load templates. Check your connection and try again.");
     }

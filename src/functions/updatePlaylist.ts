@@ -18,6 +18,8 @@ interface UpdatePlaylistRequest {
   /** When present, REPLACES the whole track list (covers add/remove/reorder in one call) — re-verified/deduped the same way createPlaylist does. */
   soundIds?: string[];
   artworkUploadId?: string;
+  /** Optional minimal optimistic-concurrency guard — the updatedAt (ISO string) the client loaded before editing. If it no longer matches the doc's current updatedAt, the playlist was changed elsewhere (e.g. the same owner on another device) and this update is rejected rather than silently overwriting it. Omitted by callers that don't carry a loaded baseline (e.g. quick add/remove). */
+  expectedUpdatedAt?: string;
 }
 
 interface UpdatePlaylistResponse {
@@ -45,6 +47,14 @@ export const updatePlaylist = onCall<UpdatePlaylistRequest, Promise<UpdatePlayli
     const snap = await ref.get();
     if (!snap.exists || snap.data()!.ownerId !== uid) {
       throw new HttpsError('not-found', "We couldn't find that playlist.");
+    }
+
+    if (data.expectedUpdatedAt) {
+      const currentUpdatedAt: FirebaseFirestore.Timestamp | undefined = snap.data()!.updatedAt;
+      const currentIso = currentUpdatedAt?.toDate?.().toISOString();
+      if (currentIso && currentIso !== data.expectedUpdatedAt) {
+        throw new HttpsError('aborted', 'This playlist was changed elsewhere. Please reload and try again.');
+      }
     }
 
     const updates: Record<string, unknown> = {};

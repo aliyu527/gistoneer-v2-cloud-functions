@@ -35,7 +35,7 @@ const ALLOWED_MIME_TYPES_BY_TYPE: Record<MediaType, readonly string[]> = {
   audio: MEDIA_LIMITS.ALLOWED_AUDIO_MIME_TYPES,
 };
 
-const MAX_SIZE_BY_TYPE: Record<MediaType, number> = {
+export const MAX_SIZE_BY_TYPE: Record<MediaType, number> = {
   image: MEDIA_LIMITS.MAX_IMAGE_SIZE_BYTES,
   video: MEDIA_LIMITS.MAX_VIDEO_SIZE_BYTES,
   audio: MEDIA_LIMITS.MAX_AUDIO_SIZE_BYTES,

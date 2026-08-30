@@ -117,6 +117,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // rateLimits/{uid_bucket} — Module 10. Per-uid fixed-window counters
+    // used by functions/src/lib/rateLimit.ts to blunt abuse of
+    // cost-sensitive endpoints (e.g. presigned-upload-URL generation).
+    // Entirely server-only — never read or written by the client.
+    match /rateLimits/{id} {
+      allow read, write: if false;
+    }
+
+    // savedSounds/{uid_trackId} — Module 12. Per-user save/unsave of
+    // catalog sounds, mirroring templateFavorites' exact posture: entirely
+    // server-written (saveSound/unsaveSound), read only through the
+    // getSavedSounds callable, never directly by the client.
+    match /savedSounds/{id} {
+      allow read, write: if false;
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {getSoundsByGenre as getSoundsByGenreService} from '../../sounds/service';
+import {clampLimit} from '../../lib/pagination';
 import type {GistoneerSound, Page} from '../../sounds/types';
 
 interface GetSoundsByGenreRequest {
@@ -20,7 +21,7 @@ export const getSoundsByGenre = onCall<GetSoundsByGenreRequest, Promise<Page<Gis
     }
 
     try {
-      return await getSoundsByGenreService(categoryId, {cursor, limit});
+      return await getSoundsByGenreService(categoryId, {cursor, limit: clampLimit(limit)});
     } catch {
       throw new HttpsError('unavailable', "Couldn't load sounds. Check your connection and try again.");
     }

@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
-import {headObject} from '../lib/s3';
+import {headObject, deleteObject} from '../lib/s3';
+import {MAX_SIZE_BY_TYPE, type MediaType} from '../lib/mediaValidation';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY} from '../config';
 
 interface ConfirmMediaUploadRequest {
@@ -70,6 +71,17 @@ export const confirmMediaUpload = onCall<ConfirmMediaUploadRequest, Promise<Conf
     const object = await headObject(data.storageKey);
     if (!object) {
       throw new HttpsError('failed-precondition', "We couldn't verify that upload finished. Please try again.");
+    }
+
+    // The presigned PUT itself doesn't cap object size — this is where the
+    // real, server-verified size is actually enforced against the same
+    // limit the client was authorized against. A client that PUTs a larger
+    // file than it declared gets caught here, not just at authorization time.
+    const maxSize = MAX_SIZE_BY_TYPE[data.mediaType as MediaType];
+    if (maxSize && object.sizeBytes > maxSize) {
+      await deleteObject(data.storageKey);
+      await docRef.update({status: 'failed'});
+      throw new HttpsError('failed-precondition', 'Uploaded file exceeds the allowed size.');
     }
 
     const completedAt = new Date();

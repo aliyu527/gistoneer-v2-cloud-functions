@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {getTemplatesByCategory as getTemplatesByCategoryService} from '../../templates/service';
+import {clampLimit} from '../../lib/pagination';
 import type {GistoneerTemplate, Page, TemplateCategory} from '../../templates/types';
 
 const CATEGORIES: readonly TemplateCategory[] = ['cinematic', 'retro', 'travel', 'birthday', 'celebration', 'gistoneer'];
@@ -22,7 +23,7 @@ export const getTemplatesByCategory = onCall<GetTemplatesByCategoryRequest, Prom
     }
 
     try {
-      return await getTemplatesByCategoryService(category, {cursor, limit});
+      return await getTemplatesByCategoryService(category, {cursor, limit: clampLimit(limit)});
     } catch {
       throw new HttpsError('unavailable', "Couldn't load templates. Check your connection and try again.");
     }

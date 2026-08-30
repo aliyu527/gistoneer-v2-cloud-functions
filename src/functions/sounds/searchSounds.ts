@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {searchSounds as searchSoundsService} from '../../sounds/service';
+import {clampLimit} from '../../lib/pagination';
 import type {GistoneerSound, Page} from '../../sounds/types';
 
 interface SearchSoundsRequest {
@@ -26,7 +27,7 @@ export const searchSounds = onCall<SearchSoundsRequest, Promise<Page<GistoneerSo
     }
 
     try {
-      return await searchSoundsService(query, {cursor, limit});
+      return await searchSoundsService(query, {cursor, limit: clampLimit(limit)});
     } catch {
       throw new HttpsError('unavailable', "Couldn't load sounds. Check your connection and try again.");
     }
