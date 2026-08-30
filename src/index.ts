@@ -24,6 +24,7 @@ export {getSoundDetail} from './functions/sounds/getSoundDetail';
 export {saveSound} from './functions/sounds/saveSound';
 export {unsaveSound} from './functions/sounds/unsaveSound';
 export {getSavedSounds} from './functions/sounds/getSavedSounds';
+export {searchUsers} from './functions/searchUsers';
 export {searchTemplates} from './functions/templates/searchTemplates';
 export {getTemplateCatalogHome} from './functions/templates/getTemplateCatalogHome';
 export {getTemplatesByCategory} from './functions/templates/getTemplatesByCategory';

@@ -3,11 +3,14 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 import {buildPublicUrl} from '../lib/s3';
 import {normalizeHashtag, normalizeUsername} from '../lib/normalize';
+import {normalizeAndValidateUrl} from '../lib/urlValidation';
+import {verifyExistingUserIds} from '../lib/userVerification';
 import {getSoundDetail} from '../sounds/service';
 
 const MAX_CAPTION_LENGTH = 2200; // matches the client's own TextInput maxLength
 const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
 const MAX_LOCATION_NAME_LENGTH = 100;
+const MAX_TAGGED_USERS = 20;
 const AUDIENCES = ['public', 'followers', 'private'] as const;
 type Audience = (typeof AUDIENCES)[number];
 const SOUND_SOURCES = ['ORIGINAL', 'DEVICE', 'LOCAL', 'CATALOG', 'RECORDING', 'LIBRARY'] as const;
@@ -55,6 +58,8 @@ interface CreatePostRequest {
   clientPostId?: string;
   layers?: CreatePostAudioLayerInput[];
   duckingLevel?: DuckingLevel;
+  taggedUserIds?: string[];
+  link?: {url?: string};
 }
 
 interface PostAudioLayer {
@@ -361,6 +366,24 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       location = {name: locationName.slice(0, MAX_LOCATION_NAME_LENGTH)};
     }
 
+    let link: {url: string} | undefined;
+    if (data.link?.url) {
+      const validated = normalizeAndValidateUrl(data.link.url);
+      if ('error' in validated) {
+        throw new HttpsError('invalid-argument', validated.error);
+      }
+      link = {url: validated.url};
+    }
+
+    // Deleted/unavailable users are silently dropped rather than failing
+    // the publish — same posture as unresolvable @mentions below.
+    let taggedUsers: {userId: string}[] = [];
+    if (Array.isArray(data.taggedUserIds) && data.taggedUserIds.length > 0) {
+      const candidates = data.taggedUserIds.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, MAX_TAGGED_USERS);
+      const verified = await verifyExistingUserIds(candidates);
+      taggedUsers = verified.map((userId) => ({userId}));
+    }
+
     const userSnap = await db.collection('users').doc(uid).get();
     const userData = userSnap.data() ?? {};
     const author: Record<string, string> = {userId: uid};
@@ -380,6 +403,8 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       audience: data.audience,
       allowComments: data.allowComments,
       ...(location ? {location} : {}),
+      ...(link ? {link} : {}),
+      ...(taggedUsers.length > 0 ? {taggedUsers} : {}),
       ...(layers.length > 0 ? {layers, duckingLevel} : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
