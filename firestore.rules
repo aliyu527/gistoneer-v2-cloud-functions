@@ -100,6 +100,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // follows/{followerId_followingId} — the real follow graph. Same
+    // fully-server-only posture as postLikes/postBookmarks/commentLikes
+    // above: entirely written by followUser/unfollowUser, read only
+    // through the getUserProfile callable's single isFollowing lookup,
+    // never directly by the client. followerCount/followingCount live on
+    // users/{uid} instead (see that match block's own comment) — this
+    // collection is just the relationship records themselves.
+    match /follows/{id} {
+      allow read, write: if false;
+    }
+
     // notifications/{id} — created inline by likePost/createComment/
     // createPost (never a separate trigger). Unlike the collections above,
     // read directly by the owner rather than through a callable — same
