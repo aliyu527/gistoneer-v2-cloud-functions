@@ -6,6 +6,7 @@ import {normalizeHashtag, normalizeUsername} from '../lib/normalize';
 import {normalizeAndValidateUrl} from '../lib/urlValidation';
 import {verifyExistingUserIds} from '../lib/userVerification';
 import {getSoundDetail} from '../sounds/service';
+import {createNotification} from '../notifications/service';
 
 const MAX_CAPTION_LENGTH = 2200; // matches the client's own TextInput maxLength
 const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
@@ -418,6 +419,16 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       status: 'published',
       counts: {likes: 0, comments: 0, bookmarks: 0, shares: 0},
     });
+
+    // Mentions/taggedUsers are already real, already server-verified uids
+    // (resolved above) — a mentioned-and-tagged user gets both
+    // notifications, matching their genuinely distinct actions. Fire in
+    // parallel; createNotification's own recipientId===actorId guard
+    // handles the author mentioning/tagging themselves.
+    await Promise.all([
+      ...mentions.map((recipientId) => createNotification({recipientId, actorId: uid, type: 'mention', postId: ref.id})),
+      ...taggedUsers.map(({userId}) => createNotification({recipientId: userId, actorId: uid, type: 'tag', postId: ref.id})),
+    ]);
 
     return {postId: ref.id};
   },

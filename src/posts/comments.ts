@@ -2,6 +2,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
 import {enforceRateLimit} from '../lib/rateLimit';
+import {createNotification} from '../notifications/service';
 
 const MAX_COMMENT_LENGTH = 500;
 const DEFAULT_COMMENTS_LIMIT = 50;
@@ -50,10 +51,11 @@ function toPostComment(id: string, data: FirebaseFirestore.DocumentData): PostCo
  * Real comments with one level of replies (no further nesting — a reply
  * can't itself be replied to, matching the spec's own "threading" as a flat
  * two-tier structure rather than arbitrary depth) and real per-comment
- * likes. Still no notifications — that infrastructure doesn't exist
- * anywhere in this app yet (a disclosed scope decision, not an oversight).
- * allowComments is enforced here, server-side, never trusting the client to
- * have already checked it — applies to replies too.
+ * likes. A top-level comment notifies the post's author; a reply notifies
+ * the parent comment's author instead (whichever of the two isn't the
+ * commenter themselves — createNotification's own recipientId===actorId
+ * guard handles that). allowComments is enforced here, server-side, never
+ * trusting the client to have already checked it — applies to replies too.
  */
 export async function createComment(uid: string, postId: string, text: string, parentCommentId: string | null): Promise<PostComment> {
   await enforceRateLimit(uid, 'createComment', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
@@ -74,8 +76,10 @@ export async function createComment(uid: string, postId: string, text: string, p
   if (postSnap.data()!.allowComments !== true) {
     throw new HttpsError('failed-precondition', 'Comments are turned off for this post.');
   }
+  const postAuthorId = postSnap.data()!.authorId as string;
 
   let parentRef: FirebaseFirestore.DocumentReference | null = null;
+  let parentAuthorId: string | null = null;
   if (parentCommentId) {
     parentRef = postRef.collection('comments').doc(parentCommentId);
     const parentSnap = await parentRef.get();
@@ -86,6 +90,7 @@ export async function createComment(uid: string, postId: string, text: string, p
     if (parentSnap.data()!.parentCommentId) {
       throw new HttpsError('invalid-argument', "Can't reply to a reply.");
     }
+    parentAuthorId = parentSnap.data()!.authorId as string;
   }
 
   const userSnap = await db.collection('users').doc(uid).get();
@@ -108,6 +113,15 @@ export async function createComment(uid: string, postId: string, text: string, p
   if (parentRef) {
     await parentRef.update({replyCount: FieldValue.increment(1)});
   }
+
+  await createNotification({
+    recipientId: parentAuthorId ?? postAuthorId,
+    actorId: uid,
+    type: 'comment',
+    postId,
+    commentId: commentRef.id,
+    isReply: !!parentAuthorId,
+  });
 
   return {
     id: commentRef.id,

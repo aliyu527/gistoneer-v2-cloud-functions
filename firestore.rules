@@ -100,6 +100,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // notifications/{id} — created inline by likePost/createComment/
+    // createPost (never a separate trigger). Unlike the collections above,
+    // read directly by the owner rather than through a callable — same
+    // "owner reads their own doc directly" posture posts/{postId} already
+    // uses. The isRead/readAt mutation still only ever happens through
+    // markNotificationRead, never a direct client write.
+    match /notifications/{id} {
+      allow read: if request.auth != null && resource.data.recipientId == request.auth.uid;
+      allow write: if false;
+    }
+
     // sounds/{soundId} — user-uploaded personal sound library (Music Studio
     // Module 2). Entirely server-written: createSound re-verifies the
     // referenced mediaUploads record (owner, confirmed status, audio type)

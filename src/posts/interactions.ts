@@ -1,6 +1,7 @@
 import {FieldValue, FieldPath} from 'firebase-admin/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
+import {createNotification} from '../notifications/service';
 
 const FIRESTORE_IN_QUERY_LIMIT = 10;
 
@@ -12,11 +13,13 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function verifyPostExists(postId: string): Promise<void> {
+/** Returns the post's authorId (needed by likePost to notify them) — throws if the post doesn't exist. */
+async function verifyPostExists(postId: string): Promise<string> {
   const snap = await db.collection('posts').doc(postId).get();
   if (!snap.exists) {
     throw new HttpsError('not-found', "We couldn't find that post.");
   }
+  return snap.data()!.authorId as string;
 }
 
 /**
@@ -28,12 +31,13 @@ async function verifyPostExists(postId: string): Promise<void> {
  * postLikes itself.
  */
 export async function likePost(uid: string, postId: string): Promise<void> {
-  await verifyPostExists(postId);
+  const authorId = await verifyPostExists(postId);
   const ref = db.collection('postLikes').doc(`${uid}_${postId}`);
   const existing = await ref.get();
   if (existing.exists) return;
   await ref.set({uid, postId, createdAt: FieldValue.serverTimestamp()});
   await db.collection('posts').doc(postId).update({'counts.likes': FieldValue.increment(1)});
+  await createNotification({recipientId: authorId, actorId: uid, type: 'like', postId});
 }
 
 export async function unlikePost(uid: string, postId: string): Promise<void> {

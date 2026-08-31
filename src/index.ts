@@ -44,3 +44,4 @@ export {getReplies} from './functions/posts/getReplies';
 export {likeComment} from './functions/posts/likeComment';
 export {unlikeComment} from './functions/posts/unlikeComment';
 export {getMyCommentInteractions} from './functions/posts/getMyCommentInteractions';
+export {markNotificationRead} from './functions/notifications/markNotificationRead';
