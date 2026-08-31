@@ -1,7 +1,26 @@
-import {FieldValue} from 'firebase-admin/firestore';
+import {FieldPath, FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 import {getActiveProvider} from './providerRegistry';
-import type {GistoneerSound, Page, PageParams} from './types';
+import type {GistoneerSound, Page, PageParams, SavedSound} from './types';
+
+const FIRESTORE_IN_QUERY_LIMIT = 10;
+
+/**
+ * A saved sound id is either a catalog track (this prefix + providerTrackId)
+ * or a bare personal-library sounds/{id} doc id — same convention
+ * soundOwnership.ts already established for playlist soundIds. Duplicated
+ * here (not imported) because soundOwnership.ts itself imports getSoundDetail
+ * from this file — importing back would be circular.
+ */
+const CATALOG_SOUND_ID_PREFIX = 'catalog:';
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
 
 /**
  * Thin functions over the active provider — imported directly by both the
@@ -68,16 +87,57 @@ export async function getSavedSoundIds(uid: string): Promise<string[]> {
 }
 
 /**
- * Hydrates saved track ids into full catalog sounds — mirrors
- * getFavoriteTemplates' exact per-id hydration. Note: this is a per-id
- * fetch (one provider.getTrack call per saved sound), currently free since
- * the active provider is the in-memory mock (providerRegistry.ts). Revisit
- * with a real batch-lookup once a real provider is wired in — not building
- * a speculative batch API against an interface with no real implementation yet.
+ * Hydrates saved ids — each is either a catalog track (`catalog:` prefix) or
+ * a personal-library sound (bare sounds/{id} doc id) — into full objects,
+ * tagged with `kind` so the client can render/route each correctly. Mirrors
+ * verifyPlaylistSoundIds' split/hydrate/recombine-in-order shape. A saved
+ * library sound is included only if it's still public or still owned by the
+ * caller (it may have been made private since being saved) — same
+ * "unresolvable → silently dropped" posture getFavoriteTemplates/
+ * resolvePlaylistTracks already use for a stale/blocked reference.
  */
-export async function getSavedSounds(uid: string): Promise<GistoneerSound[]> {
+export async function getSavedSounds(uid: string): Promise<SavedSound[]> {
   const ids = await getSavedSoundIds(uid);
+  const catalogIds = ids.filter((id) => id.startsWith(CATALOG_SOUND_ID_PREFIX)).map((id) => id.slice(CATALOG_SOUND_ID_PREFIX.length));
+  const libraryIds = ids.filter((id) => !id.startsWith(CATALOG_SOUND_ID_PREFIX));
+
   const provider = getActiveProvider();
-  const tracks = await Promise.all(ids.map((id) => provider.getTrack(id)));
-  return tracks.filter((t): t is GistoneerSound => t !== null);
+  const [catalogTracks, libraryDocs] = await Promise.all([
+    Promise.all(catalogIds.map((id) => provider.getTrack(id))),
+    Promise.all(
+      chunk([...new Set(libraryIds)], FIRESTORE_IN_QUERY_LIMIT).map((batch) =>
+        db.collection('sounds').where(FieldPath.documentId(), 'in', batch).get(),
+      ),
+    ),
+  ]);
+
+  const catalogById = new Map(catalogIds.map((id, i) => [id, catalogTracks[i]] as const));
+  const libraryById = new Map(
+    libraryDocs
+      .flatMap((snap) => snap.docs)
+      .filter((doc) => doc.data().status === 'ready' && (doc.data().visibility === 'public' || doc.data().ownerId === uid))
+      .map((doc) => [doc.id, doc.data()] as const),
+  );
+
+  return ids
+    .map((id): SavedSound | null => {
+      if (id.startsWith(CATALOG_SOUND_ID_PREFIX)) {
+        const track = catalogById.get(id.slice(CATALOG_SOUND_ID_PREFIX.length));
+        return track ? {kind: 'CATALOG', ...track} : null;
+      }
+      const sound = libraryById.get(id);
+      if (!sound) return null;
+      return {
+        kind: 'LIBRARY',
+        id,
+        title: sound.title,
+        artist: sound.artist,
+        album: sound.album,
+        genre: sound.genre,
+        durationMs: sound.durationMs,
+        audioUrl: sound.audioUrl,
+        artworkUrl: sound.artworkUrl ?? null,
+      };
+    })
+    .filter((s): s is SavedSound => s !== null);
 }

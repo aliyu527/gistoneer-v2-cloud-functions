@@ -71,12 +71,16 @@ async function extractTags(storageKey: string): Promise<ExtractedTags> {
   }
 }
 
+const VISIBILITIES = ['public', 'private'] as const;
+type Visibility = (typeof VISIBILITIES)[number];
+
 interface CreateSoundRequest {
   /** Idempotency key from the client — stable across every retry of the same upload attempt. */
   clientSoundId: string;
   uploadId: string;
   title?: string;
   durationMs?: number;
+  visibility?: Visibility;
 }
 
 interface CreateSoundResponse {
@@ -175,7 +179,7 @@ export const createSound = onCall<CreateSoundRequest, Promise<CreateSoundRespons
       artworkUrl: null,
       source: 'user_upload',
       status: 'ready',
-      visibility: 'private',
+      visibility: data.visibility && VISIBILITIES.includes(data.visibility) ? data.visibility : 'public',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

@@ -2,7 +2,7 @@ import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 import {buildPublicUrl} from '../lib/s3';
-import {verifyOwnedSoundIds} from '../lib/soundOwnership';
+import {verifyPlaylistSoundIds} from '../lib/soundOwnership';
 
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 300;
@@ -61,7 +61,7 @@ export const createPlaylist = onCall<CreatePlaylistRequest, Promise<CreatePlayli
     const visibility: Visibility = data.visibility && VISIBILITIES.includes(data.visibility) ? data.visibility : 'private';
 
     const requestedIds = Array.isArray(data.soundIds) ? data.soundIds.filter((id) => typeof id === 'string').slice(0, MAX_TRACKS) : [];
-    const soundIds = requestedIds.length > 0 ? await verifyOwnedSoundIds(requestedIds, uid) : [];
+    const soundIds = requestedIds.length > 0 ? await verifyPlaylistSoundIds(requestedIds, uid) : [];
 
     let artworkUrl: string | null = null;
     let artworkStoragePath: string | null = null;

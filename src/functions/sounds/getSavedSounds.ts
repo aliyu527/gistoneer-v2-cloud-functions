@@ -1,8 +1,8 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {getSavedSounds as getSavedSoundsService} from '../../sounds/service';
-import type {GistoneerSound} from '../../sounds/types';
+import type {SavedSound} from '../../sounds/types';
 
-export const getSavedSounds = onCall<undefined, Promise<GistoneerSound[]>>({cors: true, region: 'us-central1'}, async (request) => {
+export const getSavedSounds = onCall<undefined, Promise<SavedSound[]>>({cors: true, region: 'us-central1'}, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Please sign in and try again.');
   }

@@ -323,19 +323,20 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
           };
         }
 
-        // A LIBRARY layer references the caller's own uploaded sound
-        // (Music Studio Module 4) — same non-trust posture as CATALOG above:
-        // re-look-up the record server-side and overwrite title/artist/url
-        // from it, rather than believing whatever the client sent. trackId
-        // is the sounds/{soundId} doc id (see Services/Music/soundToTrack.ts
-        // on the client — a LIBRARY SoundTrack.id is always the sound's own
-        // Firestore id).
+        // A LIBRARY layer references either the caller's own uploaded sound
+        // or someone else's published (visibility:'public') one (Music
+        // Studio Module 4 + public sound publishing) — same non-trust
+        // posture as CATALOG above: re-look-up the record server-side and
+        // overwrite title/artist/url from it, rather than believing whatever
+        // the client sent. trackId is the sounds/{soundId} doc id (see
+        // Services/Music/soundToTrack.ts on the client — a LIBRARY
+        // SoundTrack.id is always the sound's own Firestore id).
         if (layer.source === 'LIBRARY') {
           const soundSnap = await db.collection('sounds').doc(layer.trackId).get();
-          if (!soundSnap.exists || soundSnap.data()!.ownerId !== uid) {
+          const sound = soundSnap.exists ? soundSnap.data()! : null;
+          if (!sound || (sound.ownerId !== uid && sound.visibility !== 'public')) {
             throw new HttpsError('failed-precondition', "This sound can't be used for this post.");
           }
-          const sound = soundSnap.data()!;
           layer = {
             type: layer.type,
             trackId: layer.trackId,
@@ -413,7 +414,10 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
       ...(location ? {location} : {}),
       ...(link ? {link} : {}),
       ...(taggedUsers.length > 0 ? {taggedUsers} : {}),
-      ...(layers.length > 0 ? {layers, duckingLevel} : {}),
+      // Flat, array-contains-queryable — same pattern hashtags/mentions
+      // already establish on this same document. Backs getPostsUsingSound;
+      // never a substitute for `layers` itself (title/artist/volume/etc.).
+      ...(layers.length > 0 ? {layers, duckingLevel, soundTrackIds: [...new Set(layers.map((l) => l.trackId))]} : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       status: 'published',

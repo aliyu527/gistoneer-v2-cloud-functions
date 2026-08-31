@@ -45,3 +45,5 @@ export {likeComment} from './functions/posts/likeComment';
 export {unlikeComment} from './functions/posts/unlikeComment';
 export {getMyCommentInteractions} from './functions/posts/getMyCommentInteractions';
 export {markNotificationRead} from './functions/notifications/markNotificationRead';
+export {addSoundToPlaylist} from './functions/playlists/addSoundToPlaylist';
+export {backfillSoundVisibility} from './functions/admin/backfillSoundVisibility';

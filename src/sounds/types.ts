@@ -58,6 +58,26 @@ export interface SoundCategory {
   label: string;
 }
 
+/**
+ * A saved personal-library sound, hydrated straight from its sounds/{id}
+ * doc — deliberately NOT GistoneerSound (which requires provider/license
+ * fields a personal upload doesn't have; fabricating them would misrepresent
+ * a LIBRARY save as CATALOG downstream).
+ */
+export interface SavedLibrarySound {
+  id: string;
+  title: string;
+  artist?: string;
+  album?: string;
+  genre?: string;
+  durationMs?: number;
+  audioUrl: string;
+  artworkUrl: string | null;
+}
+
+/** getSavedSounds' real response shape — a saved id can now be either a catalog track or a personal-library sound (see soundOwnership.ts's CATALOG_SOUND_ID_PREFIX convention). */
+export type SavedSound = ({kind: 'CATALOG'} & GistoneerSound) | ({kind: 'LIBRARY'} & SavedLibrarySound);
+
 export interface Page<T> {
   items: T[];
   nextCursor?: string;

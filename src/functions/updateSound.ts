@@ -6,6 +6,8 @@ import {buildPublicUrl} from '../lib/s3';
 const MAX_TITLE_LENGTH = 200;
 const MAX_TAG_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 300;
+const VISIBILITIES = ['public', 'private'] as const;
+type Visibility = (typeof VISIBILITIES)[number];
 
 interface UpdateSoundRequest {
   soundId: string;
@@ -16,6 +18,7 @@ interface UpdateSoundRequest {
   description?: string;
   /** A confirmed image upload (mediaUploads) to use as the new artwork. */
   artworkUploadId?: string;
+  visibility?: Visibility;
 }
 
 interface UpdateSoundResponse {
@@ -63,6 +66,12 @@ export const updateSound = onCall<UpdateSoundRequest, Promise<UpdateSoundRespons
     if (data.genre !== undefined) updates.genre = data.genre.trim().slice(0, MAX_TAG_LENGTH) || FieldValue.delete();
     if (data.description !== undefined) {
       updates.description = data.description.trim().slice(0, MAX_DESCRIPTION_LENGTH) || FieldValue.delete();
+    }
+    if (data.visibility !== undefined) {
+      if (!VISIBILITIES.includes(data.visibility)) {
+        throw new HttpsError('invalid-argument', 'Invalid visibility.');
+      }
+      updates.visibility = data.visibility;
     }
 
     if (data.artworkUploadId) {
