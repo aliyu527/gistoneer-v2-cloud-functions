@@ -71,6 +71,33 @@ service cloud.firestore {
       allow read: if request.auth != null
         && (resource.data.audience == 'public' || resource.data.authorId == request.auth.uid);
       allow write: if false;
+
+      // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely
+      // server-written (createComment enforces allowComments and rate
+      // limits before writing); the client never reads this subcollection
+      // directly either — getComments returns it through the Admin SDK,
+      // same "client never touches Firestore directly" posture as every
+      // other collection here.
+      match /comments/{commentId} {
+        allow read, write: if false;
+      }
+    }
+
+    // postLikes/{uid_postId}, postBookmarks/{uid_postId} — Real Home Feed.
+    // Mirrors templateFavorites' exact posture: entirely server-written
+    // (likePost/unlikePost/bookmarkPost/unbookmarkPost), read only through
+    // the getMyPostInteractions callable, never directly by the client.
+    match /postLikes/{id} {
+      allow read, write: if false;
+    }
+    match /postBookmarks/{id} {
+      allow read, write: if false;
+    }
+
+    // commentLikes/{uid_commentId} — same posture, one level deeper
+    // (comment-level likes, likeComment/unlikeComment Cloud Functions).
+    match /commentLikes/{id} {
+      allow read, write: if false;
     }
 
     // sounds/{soundId} — user-uploaded personal sound library (Music Studio

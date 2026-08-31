@@ -312,6 +312,13 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
             licenseStatus: track.license.status,
             ...(track.license.attributionRequired ? {attributionRequired: true} : {}),
             ...(track.license.attributionText ? {attributionText: track.license.attributionText} : {}),
+            // Reuses the same field DEVICE/RECORDING/LIBRARY layers store
+            // their resolved URL in (see deviceAudioUrl above/below) — a
+            // catalog track's own hosted preview URL is the only playable
+            // reference for it, and without this, catalog-sourced post
+            // sound (the most common case) would never actually be
+            // playable once published.
+            ...(track.previewUrl ? {deviceAudioUrl: track.previewUrl} : {}),
           };
         }
 
