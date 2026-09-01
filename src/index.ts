@@ -61,3 +61,4 @@ export {approveSpeaker} from './functions/live/approveSpeaker';
 export {denySpeaker} from './functions/live/denySpeaker';
 export {removeSpeaker} from './functions/live/removeSpeaker';
 export {sendLiveMessage} from './functions/live/sendLiveMessage';
+export {setSpeakerMediaState} from './functions/live/setSpeakerMediaState';

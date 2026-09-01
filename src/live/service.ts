@@ -139,6 +139,8 @@ interface LiveSpeaker {
   agoraUid: number;
   displayName: string;
   photoURL?: string;
+  audioMuted: boolean;
+  videoMuted: boolean;
 }
 
 /**
@@ -207,7 +209,7 @@ export async function approveSpeaker(hostId: string, liveId: string, targetUid: 
     if (speakers.length >= MAX_SPEAKERS) {
       throw new HttpsError('failed-precondition', 'This live already has the maximum number of speakers.');
     }
-    return [...speakers, {uid: targetUid, agoraUid, displayName, ...(photoURL ? {photoURL} : {})}];
+    return [...speakers, {uid: targetUid, agoraUid, displayName, audioMuted: false, videoMuted: false, ...(photoURL ? {photoURL} : {})}];
   });
 
   await presenceRef.update({
@@ -246,4 +248,33 @@ export async function removeSpeaker(callerId: string, liveId: string, targetUid:
   if (presenceSnap.exists) {
     await presenceRef.update({speakStatus: 'none', audioMuted: true, videoMuted: true});
   }
+}
+
+interface SetSpeakerMediaStateInput {
+  audioMuted?: boolean;
+  videoMuted?: boolean;
+}
+
+/**
+ * Host-only remote mute/video-off of an approved speaker. Agora has no way
+ * for one client to force-mute another's local stream directly — this just
+ * flips the presence doc's fields; the SPEAKER's own client (subscribed to
+ * its own presence doc via subscribeToMyPresence) is what actually calls
+ * muteLocalAudio/muteLocalVideo in response, same "Firestore field, reacted
+ * to client-side" indirection the reference Brekete implementation uses.
+ * Also updates the denormalized activeSpeakers entry so the host's own tile
+ * UI reflects the new state without a second read.
+ */
+export async function setSpeakerMediaState(hostId: string, liveId: string, targetUid: string, updates: SetSpeakerMediaStateInput): Promise<void> {
+  const {ref} = await getOwnedLiveSession(hostId, liveId);
+  const presenceRef = ref.collection('audience').doc(targetUid);
+  const presenceSnap = await presenceRef.get();
+  if (!presenceSnap.exists || presenceSnap.data()!.speakStatus !== 'approved') {
+    throw new HttpsError('failed-precondition', "This person isn't currently a speaker.");
+  }
+
+  await presenceRef.update({...updates});
+  await updateActiveSpeakers(liveId, (speakers) =>
+    speakers.map((s) => (s.uid === targetUid ? {...s, ...updates} : s)),
+  );
 }
