@@ -3,38 +3,17 @@ import {RtcTokenBuilder, RtcRole} from 'agora-token';
 import {db} from '../admin';
 import {AGORA_APP_ID, AGORA_APP_CERTIFICATE} from '../config';
 import {joinAudience} from './service';
+import {agoraUidFor} from './agoraUid';
 
 const TOKEN_TTL_SECONDS = 60 * 60; // 1 hour — see host-live.tsx's TODO for mid-broadcast refresh
 
-export type LiveRole = 'host' | 'audience';
+export type LiveRole = 'host' | 'audience' | 'speaker';
 
 export interface LiveTokenResult {
   token: string;
   appId: string;
   channelName: string;
   agoraUid: number;
-}
-
-/**
- * A Firebase uid is a string; Agora's numeric uid must be a positive
- * 32-bit integer. Derived deterministically (not client-supplied) so the
- * same person always maps to the same in-channel uid and nobody can spoof
- * another user's Agora identity by choosing their own number. FNV-1a is
- * plenty for this — collision risk is not a security boundary here (worst
- * case two users render as the same remote tile), it's just a stable,
- * cheap, dependency-free hash.
- */
-function agoraUidFor(firebaseUid: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < firebaseUid.length; i++) {
-    hash ^= firebaseUid.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  // Keep it in 1..(2^31-1) — comfortably inside Agora's 1..(2^32-1) uid
-  // range, and avoids the sign bit entirely (Agora's own JS type is a
-  // plain `number`, so staying under 2^31 sidesteps any signed/unsigned
-  // ambiguity in how the native SDK marshals it).
-  return (hash >>> 0) % 0x7fffffff || 1;
 }
 
 /**
@@ -57,6 +36,8 @@ export async function getLiveToken(uid: string, liveId: string, role: LiveRole):
   }
   const session = snap.data()!;
 
+  let agoraUid = agoraUidFor(uid);
+
   if (role === 'host') {
     if (session.hostId !== uid) {
       throw new HttpsError('permission-denied', "This isn't your live session.");
@@ -65,9 +46,20 @@ export async function getLiveToken(uid: string, liveId: string, role: LiveRole):
     throw new HttpsError('failed-precondition', 'This live is no longer available.');
   }
 
+  if (role === 'speaker') {
+    // Reuse the agoraUid already stored on the presence doc (the same
+    // value every other client already knows via the parent's denormalized
+    // activeSpeakers) rather than re-deriving — a belt-and-suspenders
+    // consistency guarantee, even though agoraUidFor is itself deterministic.
+    const presenceSnap = await db.collection('liveSessions').doc(liveId).collection('audience').doc(uid).get();
+    if (!presenceSnap.exists || presenceSnap.data()!.speakStatus !== 'approved') {
+      throw new HttpsError('permission-denied', "You haven't been approved to speak.");
+    }
+    agoraUid = (presenceSnap.data()!.agoraUid as number) ?? agoraUid;
+  }
+
   const channelName = session.agoraChannelName as string;
-  const agoraUid = agoraUidFor(uid);
-  const rtcRole = role === 'host' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
+  const rtcRole = role === 'audience' ? RtcRole.SUBSCRIBER : RtcRole.PUBLISHER;
 
   // agora-token@2.0.6's buildTokenWithUid takes tokenExpire/privilegeExpire
   // as durations in seconds *from now* (confirmed against the installed

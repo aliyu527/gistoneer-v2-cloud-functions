@@ -97,6 +97,14 @@
         {"fieldPath": "status", "order": "ASCENDING"},
         {"fieldPath": "createdAt", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "audience",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "speakStatus", "order": "ASCENDING"},
+        {"fieldPath": "requestedAt", "order": "ASCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

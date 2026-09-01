@@ -2,8 +2,10 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
 import {createNotification} from '../notifications/service';
+import {agoraUidFor} from './agoraUid';
 
 const FOLLOWER_NOTIFY_BATCH_SIZE = 400; // headroom under Firestore's 500-write batch limit
+const MAX_SPEAKERS = 4; // concurrent approved speakers, enforced in approveSpeaker — Brekete (the reference) has no cap at all
 
 interface CreateLiveSessionInput {
   title: string;
@@ -64,7 +66,15 @@ async function getOwnedLiveSession(hostId: string, liveId: string) {
  */
 export async function goLive(hostId: string, liveId: string): Promise<void> {
   const {ref} = await getOwnedLiveSession(hostId, liveId);
-  await ref.update({status: 'live', startedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+  // Denormalized so every viewer's existing liveSessions listener knows
+  // which remote uid is the host (vs. a co-host speaker) without a second
+  // lookup — needed once more than one uid can ever be publishing.
+  await ref.update({
+    status: 'live',
+    hostAgoraUid: agoraUidFor(hostId),
+    startedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
   await notifyFollowers(hostId, liveId);
 }
 
@@ -122,4 +132,118 @@ export async function leaveAudience(uid: string, liveId: string): Promise<void> 
 
   await presenceRef.delete();
   await ref.update({viewerCount: FieldValue.increment(-1)});
+}
+
+interface LiveSpeaker {
+  uid: string;
+  agoraUid: number;
+  displayName: string;
+  photoURL?: string;
+}
+
+/**
+ * Must already be an audience member (presence doc exists — every viewer
+ * gets one via joinAudience/getLiveToken('audience') before they could ever
+ * see a "request to speak" button). Denormalizes displayName/photoURL the
+ * same buildActor-style way notifications/service.ts already does, so the
+ * host's request-queue UI never needs a second read per requester.
+ */
+export async function requestToSpeak(uid: string, liveId: string): Promise<void> {
+  const liveRef = db.collection('liveSessions').doc(liveId);
+  const liveSnap = await liveRef.get();
+  if (!liveSnap.exists || liveSnap.data()!.status !== 'live') {
+    throw new HttpsError('failed-precondition', 'This live is no longer available.');
+  }
+
+  const presenceRef = liveRef.collection('audience').doc(uid);
+  const presenceSnap = await presenceRef.get();
+  if (!presenceSnap.exists) {
+    throw new HttpsError('failed-precondition', "You're not watching this live.");
+  }
+  const speakStatus = presenceSnap.data()!.speakStatus;
+  if (speakStatus === 'requested' || speakStatus === 'approved') return; // idempotent
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  const user = userSnap.data() ?? {};
+
+  await presenceRef.update({
+    speakStatus: 'requested',
+    requestedAt: FieldValue.serverTimestamp(),
+    displayName: (user.displayName as string) || (user.username as string) || 'Gistoneer user',
+    ...(user.photoURL ? {photoURL: user.photoURL} : {}),
+  });
+}
+
+export async function cancelSpeakRequest(uid: string, liveId: string): Promise<void> {
+  const presenceRef = db.collection('liveSessions').doc(liveId).collection('audience').doc(uid);
+  const snap = await presenceRef.get();
+  if (!snap.exists || snap.data()!.speakStatus !== 'requested') return;
+  await presenceRef.update({speakStatus: 'none'});
+}
+
+async function updateActiveSpeakers(liveId: string, mutate: (speakers: LiveSpeaker[]) => LiveSpeaker[]): Promise<LiveSpeaker[]> {
+  const ref = db.collection('liveSessions').doc(liveId);
+  const snap = await ref.get();
+  const current = ((snap.data()?.activeSpeakers as LiveSpeaker[] | undefined) ?? []).slice();
+  const next = mutate(current);
+  await ref.update({activeSpeakers: next, updatedAt: FieldValue.serverTimestamp()});
+  return next;
+}
+
+/** Host-only. Rejects once MAX_SPEAKERS are already approved — Brekete has no such cap. */
+export async function approveSpeaker(hostId: string, liveId: string, targetUid: string): Promise<void> {
+  const {ref} = await getOwnedLiveSession(hostId, liveId);
+  const presenceRef = ref.collection('audience').doc(targetUid);
+  const presenceSnap = await presenceRef.get();
+  if (!presenceSnap.exists || presenceSnap.data()!.speakStatus !== 'requested') {
+    throw new HttpsError('failed-precondition', 'That request is no longer pending.');
+  }
+
+  const agoraUid = agoraUidFor(targetUid);
+  const displayName = (presenceSnap.data()!.displayName as string) ?? 'Gistoneer user';
+  const photoURL = presenceSnap.data()!.photoURL as string | undefined;
+
+  await updateActiveSpeakers(liveId, (speakers) => {
+    if (speakers.length >= MAX_SPEAKERS) {
+      throw new HttpsError('failed-precondition', 'This live already has the maximum number of speakers.');
+    }
+    return [...speakers, {uid: targetUid, agoraUid, displayName, ...(photoURL ? {photoURL} : {})}];
+  });
+
+  await presenceRef.update({
+    speakStatus: 'approved',
+    respondedAt: FieldValue.serverTimestamp(),
+    agoraUid,
+    audioMuted: false,
+    videoMuted: false,
+  });
+}
+
+/** Host-only. */
+export async function denySpeaker(hostId: string, liveId: string, targetUid: string): Promise<void> {
+  const {ref} = await getOwnedLiveSession(hostId, liveId);
+  const presenceRef = ref.collection('audience').doc(targetUid);
+  const presenceSnap = await presenceRef.get();
+  if (!presenceSnap.exists || presenceSnap.data()!.speakStatus !== 'requested') return;
+  await presenceRef.update({speakStatus: 'none', respondedAt: FieldValue.serverTimestamp()});
+}
+
+/** Allowed for the host (removing someone) or the speaker themselves (stepping down). */
+export async function removeSpeaker(callerId: string, liveId: string, targetUid: string): Promise<void> {
+  const ref = db.collection('liveSessions').doc(liveId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError('not-found', "We couldn't find that live session.");
+  }
+  if (snap.data()!.hostId !== callerId && callerId !== targetUid) {
+    throw new HttpsError('permission-denied', "You can't remove this speaker.");
+  }
+
+  await updateActiveSpeakers(liveId, (speakers) => speakers.filter((s) => s.uid !== targetUid));
+
+  const presenceRef = ref.collection('audience').doc(targetUid);
+  const presenceSnap = await presenceRef.get();
+  if (presenceSnap.exists) {
+    await presenceRef.update({speakStatus: 'none', audioMuted: true, videoMuted: true});
+  }
 }

@@ -2,7 +2,7 @@ import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {getLiveToken as getLiveTokenService, type LiveRole, type LiveTokenResult} from '../../live/token';
 import {AGORA_APP_CERTIFICATE} from '../../config';
 
-const ROLES = ['host', 'audience'] as const;
+const ROLES = ['host', 'audience', 'speaker'] as const;
 
 interface GetLiveTokenRequest {
   liveId: string;

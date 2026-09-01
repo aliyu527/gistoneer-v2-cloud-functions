@@ -196,13 +196,33 @@ service cloud.firestore {
         && (resource.data.visibility == 'public' || resource.data.hostId == request.auth.uid);
       allow write: if false;
 
-      // liveSessions/{liveId}/audience/{uid} — live viewer-presence records,
-      // used only to make joinAudience/leaveAudience idempotent (same
-      // {uid}_{targetId}-idempotency spirit as postLikes, just as a
-      // subcollection instead of a composite doc id). Never read directly by
-      // the client — viewerCount is the public-facing denormalized number.
+      // liveSessions/{liveId}/audience/{uid} — live viewer-presence records
+      // (joinAudience/leaveAudience idempotency, same {uid}_{targetId}
+      // spirit as postLikes just as a subcollection) PLUS speak-request
+      // state (speakStatus). A viewer may read only their OWN doc (to
+      // detect their own approval/denial); the host may read any doc in
+      // this subcollection (the pending-request queue) — pending requests
+      // stay host-private, never broadly readable. The public-safe subset
+      // of APPROVED speakers is separately denormalized onto the parent
+      // liveSessions doc (activeSpeakers) so every viewer can render
+      // speaker tiles without needing broader access here.
       match /audience/{uid} {
-        allow read, write: if false;
+        allow read: if request.auth != null
+          && (resource.data.uid == request.auth.uid
+              || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid);
+        allow write: if false;
+      }
+
+      // liveSessions/{liveId}/messages/{messageId} — live chat. Entirely
+      // server-written (sendLiveMessage, rate-limited + length-capped).
+      // Read follows the same direct-read/server-write split as
+      // notifications/{id} (not posts/{id}/comments' fully-opaque one) —
+      // chat genuinely needs push-based realtime the way notifications do.
+      match /messages/{messageId} {
+        allow read: if request.auth != null
+          && (get(/databases/$(database)/documents/liveSessions/$(liveId)).data.visibility == 'public'
+              || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid);
+        allow write: if false;
       }
     }
 
