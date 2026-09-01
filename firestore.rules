@@ -183,6 +183,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // liveSessions/{liveId} — Gistoneer Live. Entirely server-written:
+    // createLiveSession/goLive/endLiveSession/joinAudience/leaveAudience all
+    // re-verify the caller (host ownership, or just auth for a viewer) before
+    // writing — a client-side write could never be trusted to set status or
+    // viewerCount correctly, same posture as posts/sounds above. Read follows
+    // the same public/private pattern: 'public' sessions are readable by any
+    // signed-in user, 'private' ones owner-only (private access beyond that
+    // is not implemented yet — a disclosed scope decision, not an oversight).
+    match /liveSessions/{liveId} {
+      allow read: if request.auth != null
+        && (resource.data.visibility == 'public' || resource.data.hostId == request.auth.uid);
+      allow write: if false;
+
+      // liveSessions/{liveId}/audience/{uid} — live viewer-presence records,
+      // used only to make joinAudience/leaveAudience idempotent (same
+      // {uid}_{targetId}-idempotency spirit as postLikes, just as a
+      // subcollection instead of a composite doc id). Never read directly by
+      // the client — viewerCount is the public-facing denormalized number.
+      match /audience/{uid} {
+        allow read, write: if false;
+      }
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

@@ -35,3 +35,11 @@ export const AWS_ACCESS_KEY_ID = defineSecret('AWS_ACCESS_KEY_ID');
 export const AWS_SECRET_ACCESS_KEY = defineSecret('AWS_SECRET_ACCESS_KEY');
 export const AWS_REGION = defineString('AWS_REGION');
 export const AWS_S3_ALBUM_BUCKET = defineString('AWS_S3_ALBUM_BUCKET');
+
+// Agora (Gistoneer Live). The App Certificate is a real secret — never in
+// the mobile app or source control:
+//   firebase functions:secrets:set AGORA_APP_CERTIFICATE
+// The App ID is not secret (an identifier, same posture as WEB_API_KEY) —
+// set via functions/.env: AGORA_APP_ID=...
+export const AGORA_APP_CERTIFICATE = defineSecret('AGORA_APP_CERTIFICATE');
+export const AGORA_APP_ID = defineString('AGORA_APP_ID');

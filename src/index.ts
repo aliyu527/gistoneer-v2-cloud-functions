@@ -50,3 +50,8 @@ export {backfillSoundVisibility} from './functions/admin/backfillSoundVisibility
 export {followUser} from './functions/users/followUser';
 export {unfollowUser} from './functions/users/unfollowUser';
 export {getUserProfile} from './functions/users/getUserProfile';
+export {createLiveSession} from './functions/live/createLiveSession';
+export {goLive} from './functions/live/goLive';
+export {endLiveSession} from './functions/live/endLiveSession';
+export {getLiveToken} from './functions/live/getLiveToken';
+export {leaveAudience} from './functions/live/leaveAudience';
