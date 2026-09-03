@@ -193,8 +193,26 @@ service cloud.firestore {
     // is not implemented yet — a disclosed scope decision, not an oversight).
     match /liveSessions/{liveId} {
       allow read: if request.auth != null
-        && (resource.data.visibility == 'public' || resource.data.hostId == request.auth.uid);
+        && (resource.data.visibility == 'public'
+            || resource.data.hostId == request.auth.uid
+            || (resource.data.visibility == 'private'
+                && exists(/databases/$(database)/documents/liveSessions/$(liveId)/invited/$(request.auth.uid))));
       allow write: if false;
+
+      // liveSessions/{liveId}/invited/{uid} — a private live's invite list
+      // (host-picks-viewers model, not followers-only/unlisted). Self-or-
+      // host read only — never broadly readable, or a private live's guest
+      // list would leak to anyone who could already read the parent doc.
+      // Written only by inviteToLive (Admin SDK) — the REAL enforcement for
+      // who can actually join is in joinAudience (Admin SDK bypasses these
+      // rules entirely, so this exists() check alone would not stop a
+      // non-invited user from getting a real Agora token).
+      match /invited/{uid} {
+        allow read: if request.auth != null
+          && (resource.data.uid == request.auth.uid
+              || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid);
+        allow write: if false;
+      }
 
       // liveSessions/{liveId}/ingestCredentials/secret — the real Agora
       // Media Gateway stream key for an external (OBS/vMix) broadcast.
@@ -233,7 +251,9 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if request.auth != null
           && (get(/databases/$(database)/documents/liveSessions/$(liveId)).data.visibility == 'public'
-              || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid);
+              || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid
+              || (get(/databases/$(database)/documents/liveSessions/$(liveId)).data.visibility == 'private'
+                  && exists(/databases/$(database)/documents/liveSessions/$(liveId)/invited/$(request.auth.uid))));
         allow write: if false;
       }
     }

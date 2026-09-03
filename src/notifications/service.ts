@@ -1,7 +1,7 @@
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 
-export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live';
+export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite';
 
 export interface NotificationActor {
   username?: string;
@@ -13,12 +13,12 @@ interface CreateNotificationInput {
   recipientId: string;
   actorId: string;
   type: NotificationType;
-  /** Absent for 'follow'/'live' — neither has a post. */
+  /** Absent for 'follow'/'live'/'live_invite' — none of those have a post. */
   postId?: string;
   commentId?: string;
   /** comment type only — true when this notifies a reply to the recipient's own comment, rather than a comment on the recipient's post. Lets the client render "replied to your comment" vs "commented on your post" without an extra read. */
   isReply?: boolean;
-  /** live type only. */
+  /** live/live_invite types only. */
   liveId?: string;
 }
 
@@ -73,7 +73,8 @@ export async function createNotification({recipientId, actorId, type, postId, co
     return;
   }
 
-  const idSuffix = type === 'like' ? `${postId}_${actorId}` : type === 'follow' ? actorId : type === 'live' ? liveId : postId;
+  const idSuffix =
+    type === 'like' ? `${postId}_${actorId}` : type === 'follow' ? actorId : type === 'live' || type === 'live_invite' ? liveId : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);
   await ref.set(data, {merge: true});
 }

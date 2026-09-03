@@ -64,3 +64,5 @@ export {sendLiveMessage} from './functions/live/sendLiveMessage';
 export {setSpeakerMediaState} from './functions/live/setSpeakerMediaState';
 export {startExternalStream} from './functions/live/startExternalStream';
 export {onMediaGatewayEvent} from './functions/live/onMediaGatewayEvent';
+export {inviteToLive} from './functions/live/inviteToLive';
+export {getFollowers} from './functions/users/getFollowers';

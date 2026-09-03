@@ -72,7 +72,7 @@ async function getOwnedLiveSession(hostId: string, liveId: string) {
  * established posture.
  */
 export async function goLive(hostId: string, liveId: string, hostAgoraUidOverride?: number): Promise<void> {
-  const {ref} = await getOwnedLiveSession(hostId, liveId);
+  const {ref, data} = await getOwnedLiveSession(hostId, liveId);
   // Denormalized so every viewer's existing liveSessions listener knows
   // which remote uid to render as the main tile without a second lookup —
   // the host's own derived uid for a camera broadcast, or the reserved
@@ -85,7 +85,13 @@ export async function goLive(hostId: string, liveId: string, hostAgoraUidOverrid
     startedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  await notifyFollowers(hostId, liveId);
+  // A private live's existence must never leak to non-invited followers —
+  // invitees already got their own 'live_invite' notification at invite
+  // time (inviteToLive), which is the only notification a private live
+  // ever produces.
+  if (data.visibility !== 'private') {
+    await notifyFollowers(hostId, liveId);
+  }
 }
 
 async function notifyFollowers(hostId: string, liveId: string): Promise<void> {
@@ -104,6 +110,37 @@ export async function endLiveSession(hostId: string, liveId: string): Promise<vo
   const {ref, data} = await getOwnedLiveSession(hostId, liveId);
   if (data.status === 'ended') return;
   await ref.update({status: 'ended', endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+}
+
+const MAX_INVITES_PER_CALL = 50; // sanity guard, same spirit as MAX_SPEAKERS — not a hard product limit, just abuse/mistake protection
+
+/**
+ * Host-only. Callable both before going live (from setup) and while already
+ * live (from HostLive/ExternalLive's "Invite" action) — a private live's
+ * invite list is never a fixed, one-time snapshot. Each invitee gets their
+ * own 'live_invite' notification (this is the ONLY notification a private
+ * live ever produces — see goLive's private-skip of notifyFollowers).
+ * Already-invited uids are silently idempotent (set with merge semantics
+ * via the same doc id every time), never double-notified thanks to
+ * createNotification's own deterministic-id posture.
+ */
+export async function inviteToLive(hostId: string, liveId: string, uids: string[]): Promise<void> {
+  const {ref} = await getOwnedLiveSession(hostId, liveId);
+  const targetUids = uids.slice(0, MAX_INVITES_PER_CALL);
+
+  await Promise.all(
+    targetUids.map(async (uid) => {
+      const userSnap = await db.collection('users').doc(uid).get();
+      const user = userSnap.data() ?? {};
+      await ref.collection('invited').doc(uid).set({
+        uid,
+        displayName: (user.displayName as string) || (user.username as string) || 'Gistoneer user',
+        ...(user.photoURL ? {photoURL: user.photoURL} : {}),
+        invitedAt: FieldValue.serverTimestamp(),
+      });
+      await createNotification({recipientId: uid, actorId: hostId, type: 'live_invite', liveId});
+    }),
+  );
 }
 
 /**
@@ -149,6 +186,18 @@ export async function joinAudience(uid: string, liveId: string): Promise<void> {
   const snap = await ref.get();
   if (!snap.exists || snap.data()!.status !== 'live') {
     throw new HttpsError('failed-precondition', 'This live is no longer available.');
+  }
+  const session = snap.data()!;
+
+  // The real enforcement point for private lives — getLiveToken/joinAudience
+  // run via the Admin SDK, which bypasses Firestore rules entirely, so the
+  // client-side "invited" rule on liveSessions/{id} alone would NOT stop a
+  // non-invited user from getting a real Agora token here.
+  if (session.visibility === 'private' && session.hostId !== uid) {
+    const inviteSnap = await ref.collection('invited').doc(uid).get();
+    if (!inviteSnap.exists) {
+      throw new HttpsError('permission-denied', "You weren't invited to this live.");
+    }
   }
 
   const presenceRef = ref.collection('audience').doc(uid);

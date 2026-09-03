@@ -105,6 +105,14 @@
         {"fieldPath": "speakStatus", "order": "ASCENDING"},
         {"fieldPath": "requestedAt", "order": "ASCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "follows",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "followingId", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []
