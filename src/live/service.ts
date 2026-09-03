@@ -3,13 +3,17 @@ import {HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
 import {createNotification} from '../notifications/service';
 import {agoraUidFor} from './agoraUid';
+import {provisionIngestCredentials, type IngestCredentials} from './mediaGateway';
 
 const FOLLOWER_NOTIFY_BATCH_SIZE = 400; // headroom under Firestore's 500-write batch limit
 const MAX_SPEAKERS = 4; // concurrent approved speakers, enforced in approveSpeaker — Brekete (the reference) has no cap at all
 
+export type LiveSourceType = 'camera' | 'external';
+
 interface CreateLiveSessionInput {
   title: string;
   visibility: 'public' | 'private';
+  sourceType?: LiveSourceType;
 }
 
 /**
@@ -17,7 +21,7 @@ interface CreateLiveSessionInput {
  * — same posture as notifications/service.ts's buildActor (one user read,
  * cached onto the doc rather than re-joined on every feed render).
  */
-export async function createLiveSession(hostId: string, {title, visibility}: CreateLiveSessionInput): Promise<string> {
+export async function createLiveSession(hostId: string, {title, visibility, sourceType = 'camera'}: CreateLiveSessionInput): Promise<string> {
   const hostSnap = await db.collection('users').doc(hostId).get();
   const host = hostSnap.data() ?? {};
   const hostName = (host.displayName as string) || (host.username as string) || 'Gistoneer user';
@@ -31,6 +35,7 @@ export async function createLiveSession(hostId: string, {title, visibility}: Cre
     // sensible fallback using the host's own name, not an empty string.
     title: title || `${hostName}'s Live`,
     visibility,
+    sourceType,
     status: 'starting',
     // The auto-generated doc id doubles as the Agora channel name — unique
     // by construction, never derived from anything user-identifying (spec's
@@ -58,20 +63,25 @@ async function getOwnedLiveSession(hostId: string, liveId: string) {
 }
 
 /**
- * Only ever called after the host's Agora join has actually succeeded
- * client-side — a session that fails to connect never flips to 'live' and
- * therefore never appears in the public feed. Fans out a 'live' notification
- * to the host's followers here, inline (never a separate trigger), matching
- * likePost/followUser's established posture.
+ * Only ever called after the broadcast source has actually started —
+ * client-side for the camera flow (Agora join succeeded), or internally by
+ * onMediaGatewayEvent for the external flow (the encoder connected). A
+ * session that never starts stays 'starting' and never appears in the
+ * public feed. Fans out a 'live' notification to the host's followers here,
+ * inline (never a separate trigger), matching likePost/followUser's
+ * established posture.
  */
-export async function goLive(hostId: string, liveId: string): Promise<void> {
+export async function goLive(hostId: string, liveId: string, hostAgoraUidOverride?: number): Promise<void> {
   const {ref} = await getOwnedLiveSession(hostId, liveId);
   // Denormalized so every viewer's existing liveSessions listener knows
-  // which remote uid is the host (vs. a co-host speaker) without a second
-  // lookup — needed once more than one uid can ever be publishing.
+  // which remote uid to render as the main tile without a second lookup —
+  // the host's own derived uid for a camera broadcast, or the reserved
+  // ingest uid for an external (OBS/vMix) one. Either way it's just another
+  // channel participant to every other client, so nothing downstream
+  // (viewer rendering, the Lives feed, chat) needs to know which kind it is.
   await ref.update({
     status: 'live',
-    hostAgoraUid: agoraUidFor(hostId),
+    hostAgoraUid: hostAgoraUidOverride ?? agoraUidFor(hostId),
     startedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -94,6 +104,39 @@ export async function endLiveSession(hostId: string, liveId: string): Promise<vo
   const {ref, data} = await getOwnedLiveSession(hostId, liveId);
   if (data.status === 'ended') return;
   await ref.update({status: 'ended', endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+}
+
+/**
+ * Provisions (or, on a repeat call, just re-returns) the Agora Media Gateway
+ * RTMP credentials for an external-live session. Idempotent by design — the
+ * host reopening the setup screen before OBS ever connects must see the
+ * SAME server URL/stream key, not a freshly regenerated one, or an
+ * already-configured OBS scene would silently stop working (the same
+ * caveat the reference Brekete implementation's own "regenerate key" flow
+ * warns about). The real secret (streamKey) is stored only in the
+ * host-only-readable ingestCredentials subdoc, never on the broadly
+ * public-readable parent liveSessions doc.
+ */
+export async function startExternalStream(hostId: string, liveId: string): Promise<{rtmpServerUrl: string; streamKey: string}> {
+  const {ref, data} = await getOwnedLiveSession(hostId, liveId);
+  if (data.sourceType !== 'external') {
+    throw new HttpsError('failed-precondition', 'This live session is not set up for external streaming.');
+  }
+  if (data.status !== 'starting') {
+    throw new HttpsError('failed-precondition', 'This live session has already started or ended.');
+  }
+
+  const credentialsRef = ref.collection('ingestCredentials').doc('secret');
+  const existing = await credentialsRef.get();
+  if (existing.exists) {
+    const stored = existing.data() as IngestCredentials;
+    return {rtmpServerUrl: stored.rtmpServerUrl, streamKey: stored.streamKey};
+  }
+
+  const credentials = await provisionIngestCredentials(liveId, data.agoraChannelName as string);
+  await credentialsRef.set(credentials);
+  await ref.update({externalIngestUid: credentials.ingestUid, updatedAt: FieldValue.serverTimestamp()});
+  return {rtmpServerUrl: credentials.rtmpServerUrl, streamKey: credentials.streamKey};
 }
 
 /**

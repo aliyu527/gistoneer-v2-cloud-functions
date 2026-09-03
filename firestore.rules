@@ -196,6 +196,18 @@ service cloud.firestore {
         && (resource.data.visibility == 'public' || resource.data.hostId == request.auth.uid);
       allow write: if false;
 
+      // liveSessions/{liveId}/ingestCredentials/secret — the real Agora
+      // Media Gateway stream key for an external (OBS/vMix) broadcast.
+      // Deliberately NOT on the parent doc above (readable by any signed-in
+      // user for a public live) — a real publish credential must only ever
+      // be readable by the host. Written only by startExternalStream
+      // (Admin SDK).
+      match /ingestCredentials/{docId} {
+        allow read: if request.auth != null
+          && get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid;
+        allow write: if false;
+      }
+
       // liveSessions/{liveId}/audience/{uid} — live viewer-presence records
       // (joinAudience/leaveAudience idempotency, same {uid}_{targetId}
       // spirit as postLikes just as a subcollection) PLUS speak-request

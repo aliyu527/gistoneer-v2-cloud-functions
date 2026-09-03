@@ -43,3 +43,21 @@ export const AWS_S3_ALBUM_BUCKET = defineString('AWS_S3_ALBUM_BUCKET');
 // set via functions/.env: AGORA_APP_ID=...
 export const AGORA_APP_CERTIFICATE = defineSecret('AGORA_APP_CERTIFICATE');
 export const AGORA_APP_ID = defineString('AGORA_APP_ID');
+
+// Agora Media Gateway (External Live via OBS/vMix) — a different credential
+// type than the App Certificate above: Agora's RESTful API Customer ID/
+// Secret, from Agora Console -> Developer Toolkit -> RESTful API -> Add a
+// secret. Real secrets:
+//   firebase functions:secrets:set AGORA_CUSTOMER_ID
+//   firebase functions:secrets:set AGORA_CUSTOMER_SECRET
+export const AGORA_CUSTOMER_ID = defineSecret('AGORA_CUSTOMER_ID');
+export const AGORA_CUSTOMER_SECRET = defineSecret('AGORA_CUSTOMER_SECRET');
+// Media Gateway's ingest domain is region-specific (na/eu/ap/cn) — not
+// secret, set via functions/.env: AGORA_MEDIA_GATEWAY_REGION=eu
+export const AGORA_MEDIA_GATEWAY_REGION = defineString('AGORA_MEDIA_GATEWAY_REGION');
+// The Signing Secret Agora Console generates when you register the
+// onMediaGatewayEvent webhook URL under Webhooks -> New Webhook -> Media
+// Gateway. Only obtainable AFTER that function is first deployed (need its
+// URL to register the webhook), so this secret is set in a second pass:
+//   firebase functions:secrets:set AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET
+export const AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET = defineSecret('AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET');

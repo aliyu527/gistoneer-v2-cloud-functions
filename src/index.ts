@@ -62,3 +62,5 @@ export {denySpeaker} from './functions/live/denySpeaker';
 export {removeSpeaker} from './functions/live/removeSpeaker';
 export {sendLiveMessage} from './functions/live/sendLiveMessage';
 export {setSpeakerMediaState} from './functions/live/setSpeakerMediaState';
+export {startExternalStream} from './functions/live/startExternalStream';
+export {onMediaGatewayEvent} from './functions/live/onMediaGatewayEvent';
