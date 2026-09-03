@@ -7,6 +7,7 @@ import {provisionIngestCredentials, type IngestCredentials} from './mediaGateway
 
 const FOLLOWER_NOTIFY_BATCH_SIZE = 400; // headroom under Firestore's 500-write batch limit
 const MAX_SPEAKERS = 4; // concurrent approved speakers, enforced in approveSpeaker — Brekete (the reference) has no cap at all
+const MAX_VISIBLE_VIEWERS = 100; // cap on the denormalized public viewers list — viewerCount itself stays exact/unbounded, this is just "who's shown in the list"
 
 export type LiveSourceType = 'camera' | 'external';
 
@@ -206,6 +207,27 @@ export async function joinAudience(uid: string, liveId: string): Promise<void> {
 
   await presenceRef.set({uid, joinedAt: FieldValue.serverTimestamp()});
   await ref.update({viewerCount: FieldValue.increment(1)});
+
+  // Denormalized, capped public viewers list — same "public-safe subset on
+  // the parent doc" pattern activeSpeakers already uses, so every client's
+  // existing subscribeToLiveSession listener sees it for free with no new
+  // subcollection access needed (the audience subcollection itself stays
+  // self-or-host-only — see its own rule comment). Capped rather than
+  // unbounded: a viewer past the cap still counts in viewerCount, just
+  // doesn't show up in the list — a disclosed, deliberate limit, not a bug.
+  const userSnap = await db.collection('users').doc(uid).get();
+  const user = userSnap.data() ?? {};
+  await updateViewers(liveId, (viewers) => {
+    if (viewers.length >= MAX_VISIBLE_VIEWERS || viewers.some((v) => v.uid === uid)) return viewers;
+    return [
+      ...viewers,
+      {
+        uid,
+        displayName: (user.displayName as string) || (user.username as string) || 'Gistoneer user',
+        ...(user.photoURL ? {photoURL: user.photoURL} : {}),
+      },
+    ];
+  });
 }
 
 /**
@@ -224,6 +246,21 @@ export async function leaveAudience(uid: string, liveId: string): Promise<void> 
 
   await presenceRef.delete();
   await ref.update({viewerCount: FieldValue.increment(-1)});
+  await updateViewers(liveId, (viewers) => viewers.filter((v) => v.uid !== uid));
+}
+
+interface LiveViewer {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+}
+
+async function updateViewers(liveId: string, mutate: (viewers: LiveViewer[]) => LiveViewer[]): Promise<void> {
+  const ref = db.collection('liveSessions').doc(liveId);
+  const snap = await ref.get();
+  if (!snap.exists) return; // the live may have just ended between the caller's own checks and this write
+  const current = ((snap.data()?.viewers as LiveViewer[] | undefined) ?? []).slice();
+  await ref.update({viewers: mutate(current)});
 }
 
 interface LiveSpeaker {
