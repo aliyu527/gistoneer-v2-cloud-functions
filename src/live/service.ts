@@ -4,6 +4,7 @@ import {db} from '../admin';
 import {createNotification} from '../notifications/service';
 import {agoraUidFor} from './agoraUid';
 import {provisionIngestCredentials, type IngestCredentials} from './mediaGateway';
+import {startRecording, stopRecording} from './recording';
 
 const FOLLOWER_NOTIFY_BATCH_SIZE = 400; // headroom under Firestore's 500-write batch limit
 const MAX_SPEAKERS = 4; // concurrent approved speakers, enforced in approveSpeaker — Brekete (the reference) has no cap at all
@@ -93,6 +94,18 @@ export async function goLive(hostId: string, liveId: string, hostAgoraUidOverrid
   if (data.visibility !== 'private') {
     await notifyFollowers(hostId, liveId);
   }
+
+  // Best-effort, non-blocking — a recording failure must never prevent
+  // going live. Covers both the camera flow (called directly) and External
+  // Live (called from onMediaGatewayEvent on encoder-connect), since both
+  // paths share this one function.
+  try {
+    const {resourceId, sid, recordingUid} = await startRecording(liveId, data.agoraChannelName as string);
+    await ref.update({recordingResourceId: resourceId, recordingSid: sid, recordingUid, recordingStatus: 'recording'});
+  } catch (err) {
+    console.error('[service] startRecording failed for', liveId, err);
+    await ref.update({recordingStatus: 'failed'});
+  }
 }
 
 async function notifyFollowers(hostId: string, liveId: string): Promise<void> {
@@ -111,6 +124,32 @@ export async function endLiveSession(hostId: string, liveId: string): Promise<vo
   const {ref, data} = await getOwnedLiveSession(hostId, liveId);
   if (data.status === 'ended') return;
   await ref.update({status: 'ended', endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+  await stopRecordingIfActive(liveId);
+}
+
+/**
+ * Shared by endLiveSession() (camera flow, client-called) AND
+ * onMediaGatewayEvent's direct-write disconnect branch (External Live's end
+ * path bypasses endLiveSession() entirely — this is the only place a
+ * recording started for an external broadcast ever gets stopped). No-ops if
+ * no recording was ever started, or it's already stopped/failed. Actual
+ * upload completion is confirmed asynchronously via onRecordingEvent, not
+ * this call — this only tells Agora to stop capturing and start uploading.
+ */
+export async function stopRecordingIfActive(liveId: string): Promise<void> {
+  const ref = db.collection('liveSessions').doc(liveId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const data = snap.data()!;
+  if (data.recordingStatus !== 'recording' || !data.recordingResourceId || !data.recordingSid) return;
+
+  try {
+    await stopRecording(data.agoraChannelName as string, data.recordingResourceId as string, data.recordingSid as string, data.recordingUid as number);
+    await ref.update({recordingStatus: 'stopping'});
+  } catch (err) {
+    console.error('[service] stopRecording failed for', liveId, err);
+    await ref.update({recordingStatus: 'failed'});
+  }
 }
 
 const MAX_INVITES_PER_CALL = 50; // sanity guard, same spirit as MAX_SPEAKERS — not a hard product limit, just abuse/mistake protection

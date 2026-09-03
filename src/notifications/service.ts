@@ -1,7 +1,7 @@
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 
-export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite';
+export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite' | 'live_recording_ready';
 
 export interface NotificationActor {
   username?: string;
@@ -31,14 +31,15 @@ function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor
 }
 
 /**
- * The six event types with real backing data in this app (Like, Comment,
- * Mention, Tag, Follow, Live) — no message/push infrastructure exists to
- * notify from, a disclosed scope decision, not an oversight (Live itself
- * only reaches this Firestore doc — actual push/FCM delivery is out of
- * scope, same as every other type here). Called inline from the existing
- * likePost/createComment/createPost/followUser/goLive Cloud Functions
- * (never a separate trigger) — matches this codebase's established "no
- * duplicate infrastructure" posture.
+ * Every event type with real backing data in this app (Like, Comment,
+ * Mention, Tag, Follow, Live, Live Invite, Live Recording Ready) — no
+ * message/push infrastructure exists to notify from, a disclosed scope
+ * decision, not an oversight (each of these only ever reaches this
+ * Firestore doc — actual push/FCM delivery is out of scope for all of
+ * them). Called inline from the existing likePost/createComment/
+ * createPost/followUser/goLive/inviteToLive/onRecordingEvent code (never a
+ * separate trigger) — matches this codebase's established "no duplicate
+ * infrastructure" posture.
  *
  * Deterministic ids for like/mention/tag/follow/live (`${recipientId}_${type}_${postId}`,
  * plus actorId for like/follow since multiple people can like the same post
@@ -50,7 +51,12 @@ function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor
  * every comment is a genuinely new event, never a repeat of a prior one.
  */
 export async function createNotification({recipientId, actorId, type, postId, commentId, isReply, liveId}: CreateNotificationInput): Promise<void> {
-  if (recipientId === actorId) return; // never notify yourself
+  // "Never notify yourself" is a social-interaction rule (liking/following/
+  // tagging yourself makes no sense) — it doesn't apply to a system
+  // notification ABOUT the recipient's own asset, where actorId is only
+  // ever the recipient themselves by construction (no other real actor
+  // exists for "your recording is ready").
+  if (recipientId === actorId && type !== 'live_recording_ready') return;
 
   const actorSnap = await db.collection('users').doc(actorId).get();
   const actor = buildActor(actorSnap.data() ?? {});

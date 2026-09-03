@@ -1,9 +1,9 @@
 import {onRequest} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
-import {goLive} from '../../live/service';
-import {verifyAgoraMediaGatewaySignature} from '../../lib/agoraMediaGatewayVerify';
-import {AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET} from '../../config';
+import {goLive, stopRecordingIfActive} from '../../live/service';
+import {verifyAgoraWebhookSignature} from '../../lib/agoraWebhookVerify';
+import {AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET, AGORA_APP_CERTIFICATE, AGORA_CUSTOMER_ID, AGORA_CUSTOMER_SECRET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY} from '../../config';
 
 // Agora Media Gateway's real, documented webhook event types — see
 // https://docs.agora.io/en/media-gateway/reference/rest-api/webhooks/media-gateway-event-type.
@@ -34,8 +34,15 @@ interface MediaGatewayWebhookPayload {
  * agoraChannelName === liveId by construction (see createLiveSession), so
  * the matching session is a direct doc read, never a query.
  */
+// Also declares the Cloud Recording secrets — this webhook calls goLive()
+// (start recording) on connect and stopRecordingIfActive() (stop recording)
+// on disconnect, same "every transitively-touched secret must be declared
+// on THIS function" reasoning as goLive.ts/endLiveSession.ts.
 export const onMediaGatewayEvent = onRequest(
-  {cors: false, secrets: [AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET]},
+  {
+    cors: false,
+    secrets: [AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET, AGORA_APP_CERTIFICATE, AGORA_CUSTOMER_ID, AGORA_CUSTOMER_SECRET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY],
+  },
   async (request, response) => {
     const signature = request.header('Agora-Signature-V2');
     if (!signature) {
@@ -44,7 +51,7 @@ export const onMediaGatewayEvent = onRequest(
     }
 
     const rawBody = request.rawBody?.toString('utf8') ?? '';
-    const valid = verifyAgoraMediaGatewaySignature(AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET.value(), signature, rawBody);
+    const valid = verifyAgoraWebhookSignature(AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET.value(), signature, rawBody);
     if (!valid) {
       response.status(401).send('Invalid signature');
       return;
@@ -85,6 +92,10 @@ export const onMediaGatewayEvent = onRequest(
         // this transition is authenticated by the webhook signature above,
         // not a user action.
         await ref.update({status: 'ended', endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+        // External Live's end path never goes through endLiveSession() —
+        // this is the only place a recording started for an external
+        // broadcast ever gets stopped.
+        await stopRecordingIfActive(liveId);
       }
     }
 

@@ -61,3 +61,14 @@ export const AGORA_MEDIA_GATEWAY_REGION = defineString('AGORA_MEDIA_GATEWAY_REGI
 // URL to register the webhook), so this secret is set in a second pass:
 //   firebase functions:secrets:set AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET
 export const AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET = defineSecret('AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET');
+
+// Agora Cloud Recording (auto-record every Live, upload straight to the
+// existing S3 album bucket). Reuses AGORA_CUSTOMER_ID/AGORA_CUSTOMER_SECRET
+// above (Cloud Recording's REST API is the same RESTful credential type)
+// and the AWS_* config above (storageConfig points directly at
+// AWS_S3_ALBUM_BUCKET — no new bucket/credentials). Only this webhook's
+// signing secret is new, same two-step dance as AGORA_MEDIA_GATEWAY_WEBHOOK_SECRET
+// (deploy onRecordingEvent first to get its URL, register in Console ->
+// Webhooks -> New Webhook -> Cloud Recording, then):
+//   firebase functions:secrets:set AGORA_CLOUD_RECORDING_WEBHOOK_SECRET
+export const AGORA_CLOUD_RECORDING_WEBHOOK_SECRET = defineSecret('AGORA_CLOUD_RECORDING_WEBHOOK_SECRET');
