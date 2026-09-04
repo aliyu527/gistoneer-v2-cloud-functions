@@ -1,4 +1,4 @@
-import {S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_S3_ALBUM_BUCKET} from '../config';
 
@@ -93,4 +93,29 @@ export async function getObjectBuffer(key: string): Promise<Buffer> {
 /** S3 DeleteObject is itself idempotent — deleting an already-gone (or never-uploaded) key succeeds silently. */
 export async function deleteObject(key: string): Promise<void> {
   await getClient().send(new DeleteObjectCommand({Bucket: getBucketName(), Key: key}));
+}
+
+/**
+ * Lists every object key under a prefix (paginated via ContinuationToken —
+ * a live recording's HLS segment count can exceed the 1000-key single-page
+ * cap for a longer broadcast). Used by onRecordingEvent to clean up the
+ * Cloud Recording HLS output by prefix rather than by Agora's self-reported
+ * fileList, which only enumerates independently-playable outputs (the mp4,
+ * the .m3u8 playlist) and omits the individual .ts segments the playlist
+ * references — confirmed by comparing a real fileList against the bucket's
+ * actual contents for the same recording.
+ */
+export async function listObjectKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const result = await getClient().send(
+      new ListObjectsV2Command({Bucket: getBucketName(), Prefix: prefix, ContinuationToken: continuationToken}),
+    );
+    for (const obj of result.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return keys;
 }

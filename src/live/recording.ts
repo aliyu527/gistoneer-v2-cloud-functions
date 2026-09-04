@@ -140,7 +140,13 @@ export async function startRecording(liveId: string, channelName: string): Promi
         },
       },
       recordingFileConfig: {
-        avFileType: ['mp4'], // one continuous playable file, not HLS segments — this becomes a post's video
+        // Agora rejects avFileType: ['mp4'] alone ("avFileType can not set
+        // mp4 only" — confirmed against the real API, not documented) —
+        // composite recording always records as HLS internally; mp4 is an
+        // additional transcode alongside it, not a replacement for it. The
+        // webhook's fileList will now contain the .m3u8/.ts HLS files too;
+        // onRecordingEvent.ts picks out the .mp4 entry specifically.
+        avFileType: ['hls', 'mp4'],
       },
       storageConfig: {
         vendor: S3_VENDOR,
