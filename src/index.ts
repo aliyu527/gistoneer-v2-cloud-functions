@@ -69,3 +69,5 @@ export {onMediaGatewayEvent} from './functions/live/onMediaGatewayEvent';
 export {onRecordingEvent} from './functions/live/onRecordingEvent';
 export {inviteToLive} from './functions/live/inviteToLive';
 export {getFollowers} from './functions/users/getFollowers';
+export {getFollowing} from './functions/users/getFollowing';
+export {getSuggestedUsers} from './functions/users/getSuggestedUsers';
