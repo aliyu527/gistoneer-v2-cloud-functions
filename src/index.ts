@@ -49,6 +49,8 @@ export {getMyCommentInteractions} from './functions/posts/getMyCommentInteractio
 export {markNotificationRead} from './functions/notifications/markNotificationRead';
 export {addSoundToPlaylist} from './functions/playlists/addSoundToPlaylist';
 export {backfillSoundVisibility} from './functions/admin/backfillSoundVisibility';
+export {bootstrapAdmin} from './functions/admin/bootstrapAdmin';
+export {getAdminSession} from './functions/admin/getAdminSession';
 export {followUser} from './functions/users/followUser';
 export {unfollowUser} from './functions/users/unfollowUser';
 export {getUserProfile} from './functions/users/getUserProfile';
