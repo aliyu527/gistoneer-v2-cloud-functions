@@ -11,26 +11,37 @@ export type AdminAuditAction =
   | 'sound.restore'
   | 'sound.remove'
   | 'live.end'
-  | 'live.chat.delete';
+  | 'live.chat.delete'
+  | 'notification.send';
 
 interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content' | 'sound' | 'live';
+  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification';
   targetId: string;
   reason: string | null;
+  /** Module 08: lets a notification "campaign" carry its own rich record (title/body/audience/recipientCount) without a second collection — adminAuditLogs is already the source of truth for "who did what, when." */
+  metadata?: Record<string, unknown>;
+  /** Pre-generated id (e.g. via db.collection('adminAuditLogs').doc().id) — lets a caller know the doc id BEFORE writing, for cases like Module 08's per-recipient notification docs needing the campaign id as their own idempotency-key suffix. Omit for a fresh auto-id (every prior call site). */
+  docId?: string;
 }
 
 /**
  * First audit-log mechanism in this codebase (Module 04). Best-effort by
  * design — every caller wraps this in `.catch(() => {})` so a logging
  * failure never blocks the actual admin action it's recording (the action
- * already happened by the time this is called).
+ * already happened by the time this is called). Returns the resulting doc's
+ * id (harmless addition — every existing caller already ignores the return
+ * value).
  */
-export async function writeAuditLog(entry: AdminAuditLogInput): Promise<void> {
-  await db.collection('adminAuditLogs').add({
-    ...entry,
-    createdAt: FieldValue.serverTimestamp(),
-  });
+export async function writeAuditLog(entry: AdminAuditLogInput): Promise<string> {
+  const {docId, ...rest} = entry;
+  const payload = {...rest, createdAt: FieldValue.serverTimestamp()};
+  if (docId) {
+    await db.collection('adminAuditLogs').doc(docId).set(payload);
+    return docId;
+  }
+  const ref = await db.collection('adminAuditLogs').add(payload);
+  return ref.id;
 }

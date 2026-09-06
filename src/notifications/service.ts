@@ -1,7 +1,7 @@
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 
-export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite' | 'live_recording_ready';
+export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite' | 'live_recording_ready' | 'announcement';
 
 export interface NotificationActor {
   username?: string;
@@ -13,13 +13,20 @@ interface CreateNotificationInput {
   recipientId: string;
   actorId: string;
   type: NotificationType;
-  /** Absent for 'follow'/'live'/'live_invite' — none of those have a post. */
+  /** Absent for 'follow'/'live'/'live_invite'/'announcement' — none of those have a post. */
   postId?: string;
   commentId?: string;
   /** comment type only — true when this notifies a reply to the recipient's own comment, rather than a comment on the recipient's post. Lets the client render "replied to your comment" vs "commented on your post" without an extra read. */
   isReply?: boolean;
   /** live/live_invite types only. */
   liveId?: string;
+  /** announcement type only — the admin's own message text, since there's no real actor/entity to compute inbox copy from. */
+  title?: string;
+  body?: string;
+  /** announcement type only — the Module 08 admin send's own campaign id (an adminAuditLogs doc id), used as this type's idempotency-key suffix instead of a post/live id. */
+  campaignId?: string;
+  /** Skips the live users/{actorId} lookup and uses this directly — announcement's actorId ('system') has no real user doc to denormalize from. */
+  actorOverride?: NotificationActor;
 }
 
 function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor {
@@ -50,16 +57,28 @@ function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor
  * doc-id-as-idempotency-key pattern. Comment gets a fresh auto-id since
  * every comment is a genuinely new event, never a repeat of a prior one.
  */
-export async function createNotification({recipientId, actorId, type, postId, commentId, isReply, liveId}: CreateNotificationInput): Promise<void> {
+export async function createNotification({
+  recipientId,
+  actorId,
+  type,
+  postId,
+  commentId,
+  isReply,
+  liveId,
+  title,
+  body,
+  campaignId,
+  actorOverride,
+}: CreateNotificationInput): Promise<void> {
   // "Never notify yourself" is a social-interaction rule (liking/following/
   // tagging yourself makes no sense) — it doesn't apply to a system
   // notification ABOUT the recipient's own asset, where actorId is only
   // ever the recipient themselves by construction (no other real actor
-  // exists for "your recording is ready").
-  if (recipientId === actorId && type !== 'live_recording_ready') return;
+  // exists for "your recording is ready"), nor to an announcement (actorId
+  // is the fixed 'system' sentinel, never a real recipient's own uid).
+  if (recipientId === actorId && type !== 'live_recording_ready' && type !== 'announcement') return;
 
-  const actorSnap = await db.collection('users').doc(actorId).get();
-  const actor = buildActor(actorSnap.data() ?? {});
+  const actor = actorOverride ?? buildActor((await db.collection('users').doc(actorId).get()).data() ?? {});
 
   const data = {
     recipientId,
@@ -70,6 +89,8 @@ export async function createNotification({recipientId, actorId, type, postId, co
     ...(commentId ? {commentId} : {}),
     ...(isReply ? {isReply: true} : {}),
     ...(liveId ? {liveId} : {}),
+    ...(title ? {title} : {}),
+    ...(body ? {body} : {}),
     isRead: false,
     createdAt: FieldValue.serverTimestamp(),
   };
@@ -80,7 +101,15 @@ export async function createNotification({recipientId, actorId, type, postId, co
   }
 
   const idSuffix =
-    type === 'like' ? `${postId}_${actorId}` : type === 'follow' ? actorId : type === 'live' || type === 'live_invite' ? liveId : postId;
+    type === 'like'
+      ? `${postId}_${actorId}`
+      : type === 'follow'
+        ? actorId
+        : type === 'live' || type === 'live_invite'
+          ? liveId
+          : type === 'announcement'
+            ? campaignId
+            : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);
   await ref.set(data, {merge: true});
 }
