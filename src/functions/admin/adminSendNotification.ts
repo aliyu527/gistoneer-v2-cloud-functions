@@ -1,4 +1,5 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
@@ -117,6 +118,7 @@ export const adminSendNotification = onCall<AdminSendNotificationRequest, Promis
           title,
           body,
           isRead: false,
+          createdAt: FieldValue.serverTimestamp(),
         },
         {merge: true},
       );
