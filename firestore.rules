@@ -311,6 +311,38 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // vendors/{uid} — Marketplace vendor application + shop profile, one
+    // evolving doc per user (doc id == uid), same "one doc, evolving status"
+    // shape admins/{uid} already uses. Entirely server-written
+    // (submitVendorApplication/updateShop/admin approve-reject-suspend).
+    // Owner always reads their own doc (any status, including
+    // pending/rejected — their own application). Everyone else can read it
+    // only once it's a real public shop (status=='approved') — a pending or
+    // rejected application is private.
+    match /vendors/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || resource.data.status == 'approved');
+      allow write: if false;
+    }
+
+    // listings/{listingId} — Marketplace products/services (unified model,
+    // `type` discriminates). Entirely server-written (createListing/
+    // updateListing re-verify every referenced media upload and the
+    // caller's own vendor status before writing). Owner always reads their
+    // own listing (any status, including draft/suspended — visible in "My
+    // Shop"). Everyone else only if published AND the denormalized
+    // vendorStatus is 'approved' — a suspended vendor's listings must stop
+    // being visible even though Firestore can't join to the live vendors/
+    // {vendorId} doc in a rule/query. Uses get() with an explicit default
+    // (not dot notation) for the same reason as the posts/sounds/messages
+    // rules above — every field here is new, and today's outage already
+    // proved what a bare dot-access on a possibly-missing field does.
+    match /listings/{listingId} {
+      allow read: if request.auth != null
+        && (resource.data.vendorId == request.auth.uid
+            || (resource.data.status == 'published' && resource.data.get('vendorStatus', 'approved') == 'approved'));
+      allow write: if false;
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

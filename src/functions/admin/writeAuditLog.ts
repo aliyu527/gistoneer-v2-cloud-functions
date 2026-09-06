@@ -12,13 +12,19 @@ export type AdminAuditAction =
   | 'sound.remove'
   | 'live.end'
   | 'live.chat.delete'
-  | 'notification.send';
+  | 'notification.send'
+  | 'vendor.approve'
+  | 'vendor.reject'
+  | 'vendor.suspend'
+  | 'vendor.restore'
+  | 'listing.suspend'
+  | 'listing.restore';
 
 interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification';
+  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification' | 'vendor' | 'listing';
   targetId: string;
   reason: string | null;
   /** Module 08: lets a notification "campaign" carry its own rich record (title/body/audience/recipientCount) without a second collection — adminAuditLogs is already the source of truth for "who did what, when." */

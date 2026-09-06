@@ -25,6 +25,7 @@ export type Permission =
   | 'notifications.send'
   | 'marketplace.read'
   | 'marketplace.moderate'
+  | 'marketplace.vendors.manage'
   | 'settings.read'
   | 'settings.write'
   | 'admins.read'
@@ -49,6 +50,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'notifications.send',
   'marketplace.read',
   'marketplace.moderate',
+  'marketplace.vendors.manage',
   'settings.read',
   'settings.write',
   'admins.read',

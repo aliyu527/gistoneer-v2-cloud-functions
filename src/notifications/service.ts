@@ -1,7 +1,19 @@
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../admin';
 
-export type NotificationType = 'like' | 'comment' | 'mention' | 'tag' | 'follow' | 'live' | 'live_invite' | 'live_recording_ready' | 'announcement';
+export type NotificationType =
+  | 'like'
+  | 'comment'
+  | 'mention'
+  | 'tag'
+  | 'follow'
+  | 'live'
+  | 'live_invite'
+  | 'live_recording_ready'
+  | 'announcement'
+  | 'vendor_approved'
+  | 'vendor_rejected'
+  | 'listing_suspended';
 
 export interface NotificationActor {
   username?: string;
@@ -25,8 +37,12 @@ interface CreateNotificationInput {
   body?: string;
   /** announcement type only — the Module 08 admin send's own campaign id (an adminAuditLogs doc id), used as this type's idempotency-key suffix instead of a post/live id. */
   campaignId?: string;
-  /** Skips the live users/{actorId} lookup and uses this directly — announcement's actorId ('system') has no real user doc to denormalize from. */
+  /** Skips the live users/{actorId} lookup and uses this directly — announcement/vendor_approved/vendor_rejected/listing_suspended's actorId ('system') has no real user doc to denormalize from. */
   actorOverride?: NotificationActor;
+  /** vendor_rejected/listing_suspended types only — the admin's stated reason. */
+  reason?: string;
+  /** listing_suspended type only. */
+  listingId?: string;
 }
 
 function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor {
@@ -69,14 +85,19 @@ export async function createNotification({
   body,
   campaignId,
   actorOverride,
+  reason,
+  listingId,
 }: CreateNotificationInput): Promise<void> {
   // "Never notify yourself" is a social-interaction rule (liking/following/
   // tagging yourself makes no sense) — it doesn't apply to a system
   // notification ABOUT the recipient's own asset, where actorId is only
   // ever the recipient themselves by construction (no other real actor
-  // exists for "your recording is ready"), nor to an announcement (actorId
-  // is the fixed 'system' sentinel, never a real recipient's own uid).
-  if (recipientId === actorId && type !== 'live_recording_ready' && type !== 'announcement') return;
+  // exists for "your recording is ready"), nor to a system-originated
+  // message (actorId is the fixed 'system' sentinel, never a real
+  // recipient's own uid) — announcement, and Marketplace's
+  // vendor_approved/vendor_rejected/listing_suspended.
+  const SYSTEM_TYPES: NotificationType[] = ['live_recording_ready', 'announcement', 'vendor_approved', 'vendor_rejected', 'listing_suspended'];
+  if (recipientId === actorId && !SYSTEM_TYPES.includes(type)) return;
 
   const actor = actorOverride ?? buildActor((await db.collection('users').doc(actorId).get()).data() ?? {});
 
@@ -91,6 +112,8 @@ export async function createNotification({
     ...(liveId ? {liveId} : {}),
     ...(title ? {title} : {}),
     ...(body ? {body} : {}),
+    ...(reason ? {reason} : {}),
+    ...(listingId ? {listingId} : {}),
     isRead: false,
     createdAt: FieldValue.serverTimestamp(),
   };
@@ -109,7 +132,11 @@ export async function createNotification({
           ? liveId
           : type === 'announcement'
             ? campaignId
-            : postId;
+            : type === 'vendor_approved' || type === 'vendor_rejected'
+              ? actorId
+              : type === 'listing_suspended'
+                ? listingId
+                : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);
   await ref.set(data, {merge: true});
 }
