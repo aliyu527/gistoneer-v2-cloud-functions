@@ -280,8 +280,20 @@ service cloud.firestore {
       // Read follows the same direct-read/server-write split as
       // notifications/{id} (not posts/{id}/comments' fully-opaque one) —
       // chat genuinely needs push-based realtime the way notifications do.
+      //
+      // Admin Panel Module 07 addition: a message also stops being readable
+      // by anyone once deleteLiveMessage (via the Admin SDK, which bypasses
+      // this rule) sets deleted:true — narrowing-only, same pattern as
+      // Module 05/06's moderationStatus rules. Uses resource.data.get() with
+      // an explicit default, NOT dot notation (resource.data.deleted) —
+      // every message predates this field, and dot-accessing a missing map
+      // key throws in the rules evaluator, which Firestore treats as a
+      // denied read. That exact mistake (moderationStatus dot-access on
+      // posts/sounds) broke the entire home feed for hours after the
+      // Module 05 deploy; get() with a default avoids repeating it here.
       match /messages/{messageId} {
         allow read: if request.auth != null
+          && !resource.data.get('deleted', false)
           && (get(/databases/$(database)/documents/liveSessions/$(liveId)).data.visibility == 'public'
               || get(/databases/$(database)/documents/liveSessions/$(liveId)).data.hostId == request.auth.uid
               || (get(/databases/$(database)/documents/liveSessions/$(liveId)).data.visibility == 'private'

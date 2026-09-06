@@ -9,13 +9,15 @@ export type AdminAuditAction =
   | 'content.remove'
   | 'sound.hide'
   | 'sound.restore'
-  | 'sound.remove';
+  | 'sound.remove'
+  | 'live.end'
+  | 'live.chat.delete';
 
 interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content' | 'sound';
+  targetType: 'user' | 'content' | 'sound' | 'live';
   targetId: string;
   reason: string | null;
 }
