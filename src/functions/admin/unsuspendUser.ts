@@ -14,7 +14,7 @@ interface UnsuspendUserResponse {
 }
 
 export const unsuspendUser = onCall<UnsuspendUserRequest, Promise<UnsuspendUserResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  const admin = await requireActiveAdmin(request);
+  const admin = await requireActiveAdmin(request, 'users.suspend');
 
   const uid = request.data?.uid;
   if (typeof uid !== 'string' || uid.length === 0) {
@@ -40,7 +40,7 @@ export const unsuspendUser = onCall<UnsuspendUserRequest, Promise<UnsuspendUserR
     actorEmail: admin.email,
     action: 'user.unsuspend',
     targetType: 'user',
-    targetUid: uid,
+    targetId: uid,
     reason: null,
   }).catch(() => {});
 

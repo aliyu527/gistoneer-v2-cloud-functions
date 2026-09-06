@@ -24,7 +24,7 @@ interface SuspendUserResponse {
  * user is still safely locked out rather than silently not suspended.
  */
 export const suspendUser = onCall<SuspendUserRequest, Promise<SuspendUserResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  const admin = await requireActiveAdmin(request);
+  const admin = await requireActiveAdmin(request, 'users.suspend');
 
   const uid = request.data?.uid;
   const reason = request.data?.reason;
@@ -57,7 +57,7 @@ export const suspendUser = onCall<SuspendUserRequest, Promise<SuspendUserRespons
     actorEmail: admin.email,
     action: 'user.suspend',
     targetType: 'user',
-    targetUid: uid,
+    targetId: uid,
     reason: reason.trim(),
   }).catch(() => {});
 

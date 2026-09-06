@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import type {AdminUserListItem} from './adminListUsers';
+import {requireActiveAdmin} from './requireActiveAdmin';
 
 interface AdminSearchUsersRequest {
   query: string;
@@ -52,9 +53,7 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
  * Firestore has no native substring/multi-field search.
  */
 export const adminSearchUsers = onCall<AdminSearchUsersRequest, Promise<AdminSearchUsersResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdmin(request, 'users.read');
 
   const raw = request.data?.query;
   if (typeof raw !== 'string' || raw.trim().length === 0) {

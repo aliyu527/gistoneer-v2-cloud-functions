@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import type {AdminUserListItem} from './adminListUsers';
+import {requireActiveAdmin} from './requireActiveAdmin';
 
 export interface AdminUserDetail extends AdminUserListItem {
   usernameLower: string | null;
@@ -26,9 +27,7 @@ interface AdminGetUserDetailRequest {
  * invented since none exist in the data model.
  */
 export const adminGetUserDetail = onCall<AdminGetUserDetailRequest, Promise<AdminUserDetail>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdmin(request, 'users.read');
 
   const uid = request.data?.uid;
   if (typeof uid !== 'string' || uid.length === 0) {
@@ -47,7 +46,7 @@ export const adminGetUserDetail = onCall<AdminGetUserDetailRequest, Promise<Admi
     db.collection('sounds').where('ownerId', '==', uid).count().get(),
     db.collection('playlists').where('ownerId', '==', uid).count().get(),
     status === 'suspended'
-      ? db.collection('adminAuditLogs').where('targetUid', '==', uid).where('action', '==', 'user.suspend').orderBy('createdAt', 'desc').limit(1).get()
+      ? db.collection('adminAuditLogs').where('targetId', '==', uid).where('action', '==', 'user.suspend').orderBy('createdAt', 'desc').limit(1).get()
       : Promise.resolve(null),
   ]);
 

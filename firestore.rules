@@ -67,9 +67,20 @@ service cloud.firestore {
     // 'private' posts are author-only for now since no followers graph
     // exists yet in this app — a deliberately conservative default (never
     // leaks a restricted post) rather than a fabricated follower check.
+    //
+    // Admin Panel Module 05 addition: a 'public' post also stops being
+    // readable by anyone but its author once hideContent/removeContent (via
+    // the Admin SDK, which bypasses this rule) sets moderationStatus to
+    // 'hidden' or 'removed' — this is the ONLY real enforcement point for
+    // those actions, since the mobile app reads posts directly via this rule
+    // rather than through a callable. Narrowing-only: never grants more
+    // access than before, and the author can still always see their own
+    // post regardless of moderationStatus.
     match /posts/{postId} {
       allow read: if request.auth != null
-        && (resource.data.audience == 'public' || resource.data.authorId == request.auth.uid);
+        && (resource.data.authorId == request.auth.uid
+            || (resource.data.audience == 'public'
+                && !(resource.data.moderationStatus in ['hidden', 'removed'])));
       allow write: if false;
 
       // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely

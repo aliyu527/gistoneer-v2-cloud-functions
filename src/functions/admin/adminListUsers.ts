@@ -1,7 +1,8 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import type {Query, DocumentData} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {clampLimit} from '../../lib/pagination';
+import {requireActiveAdmin} from './requireActiveAdmin';
 
 export interface AdminUserListItem {
   uid: string;
@@ -65,9 +66,7 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
  * auto-indexed).
  */
 export const adminListUsers = onCall<AdminListUsersRequest, Promise<AdminListUsersResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdmin(request, 'users.read');
 
   const {status, verified, sortDir = 'desc', cursor} = request.data ?? {};
   const pageSize = clampLimit(request.data?.pageSize, 50, 20);
