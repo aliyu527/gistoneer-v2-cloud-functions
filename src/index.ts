@@ -68,6 +68,16 @@ export {adminGetContentComments} from './functions/admin/adminGetContentComments
 export {hideContent} from './functions/admin/hideContent';
 export {restoreContent} from './functions/admin/restoreContent';
 export {removeContent} from './functions/admin/removeContent';
+export {adminListSounds} from './functions/admin/adminListSounds';
+export {adminSearchSounds} from './functions/admin/adminSearchSounds';
+export {adminGetSoundDetail} from './functions/admin/adminGetSoundDetail';
+export {adminGetPostsUsingSound} from './functions/admin/adminGetPostsUsingSound';
+export {hideSound} from './functions/admin/hideSound';
+export {restoreSound} from './functions/admin/restoreSound';
+export {removeSound} from './functions/admin/removeSound';
+export {adminListPlaylists} from './functions/admin/adminListPlaylists';
+export {adminSearchPlaylists} from './functions/admin/adminSearchPlaylists';
+export {adminGetPlaylistDetail} from './functions/admin/adminGetPlaylistDetail';
 export {followUser} from './functions/users/followUser';
 export {unfollowUser} from './functions/users/unfollowUser';
 export {getUserProfile} from './functions/users/getUserProfile';

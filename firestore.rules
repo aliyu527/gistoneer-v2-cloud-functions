@@ -75,12 +75,19 @@ service cloud.firestore {
     // those actions, since the mobile app reads posts directly via this rule
     // rather than through a callable. Narrowing-only: never grants more
     // access than before, and the author can still always see their own
-    // post regardless of moderationStatus.
+    // post regardless of moderationStatus. IMPORTANT: every post predating
+    // this field has no moderationStatus key at all — accessing it via dot
+    // notation (resource.data.moderationStatus) THROWS in the rules
+    // evaluator for a missing map key, which Firestore treats as a denied
+    // read. That bug broke every legacy post's read (the entire home feed)
+    // for several hours after the Module 05 deploy. Fixed by using get()
+    // with an explicit default, matching the same 'active' default the
+    // Cloud Functions themselves already use when reading this field.
     match /posts/{postId} {
       allow read: if request.auth != null
         && (resource.data.authorId == request.auth.uid
             || (resource.data.audience == 'public'
-                && !(resource.data.moderationStatus in ['hidden', 'removed'])));
+                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])));
       allow write: if false;
 
       // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely
@@ -140,9 +147,23 @@ service cloud.firestore {
     // that correctly — same posture as mediaUploads/posts above. Read follows
     // the same public/private pattern playlists already uses: 'public'
     // sounds are readable by any signed-in user, 'private' ones owner-only.
+    //
+    // Admin Panel Module 06 addition: a 'public' sound also stops being
+    // readable by anyone but its owner once hideSound/removeSound (via the
+    // Admin SDK, which bypasses this rule) sets moderationStatus to 'hidden'
+    // or 'removed' — same narrowing-only pattern as Module 05's posts rule.
+    // Never grants more access than before; the owner can still always see
+    // their own sound regardless of moderationStatus. Uses get() with an
+    // explicit default (not dot notation) — every sound predating this field
+    // has no moderationStatus key, and dot-accessing a missing map key
+    // throws in the rules evaluator, which Firestore treats as a denied
+    // read. The identical mistake in the posts rule above broke the entire
+    // home feed for several hours after the Module 05 deploy.
     match /sounds/{soundId} {
       allow read: if request.auth != null
-        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid);
+        && (resource.data.ownerId == request.auth.uid
+            || (resource.data.visibility == 'public'
+                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])));
       allow write: if false;
     }
 

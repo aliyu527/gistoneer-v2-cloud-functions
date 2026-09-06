@@ -1,13 +1,21 @@
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 
-export type AdminAuditAction = 'user.suspend' | 'user.unsuspend' | 'content.hide' | 'content.restore' | 'content.remove';
+export type AdminAuditAction =
+  | 'user.suspend'
+  | 'user.unsuspend'
+  | 'content.hide'
+  | 'content.restore'
+  | 'content.remove'
+  | 'sound.hide'
+  | 'sound.restore'
+  | 'sound.remove';
 
 interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content';
+  targetType: 'user' | 'content' | 'sound';
   targetId: string;
   reason: string | null;
 }
