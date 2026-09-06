@@ -258,6 +258,15 @@ service cloud.firestore {
       }
     }
 
+    // adminAuditLogs/{id} — Module 04. Records of admin actions (suspend/
+    // unsuspend a user, etc.), written by writeAuditLog() via the Admin SDK.
+    // Server-only like every other admin-adjacent collection here — no
+    // browsing UI reads this directly either; adminGetUserDetail's
+    // lastSuspension field is the only reader, also via the Admin SDK.
+    match /adminAuditLogs/{id} {
+      allow read, write: if false;
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

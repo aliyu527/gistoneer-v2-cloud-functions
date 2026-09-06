@@ -1,0 +1,96 @@
+import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import type {Query, DocumentData} from 'firebase-admin/firestore';
+import {db} from '../../admin';
+import {clampLimit} from '../../lib/pagination';
+
+export interface AdminUserListItem {
+  uid: string;
+  username: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  email: string | null;
+  phone: string | null;
+  status: 'active' | 'suspended';
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  followerCount: number;
+  followingCount: number;
+  createdAt: string | null;
+}
+
+interface AdminListUsersRequest {
+  status?: 'active' | 'suspended';
+  verified?: boolean;
+  sortDir?: 'asc' | 'desc';
+  pageSize?: number;
+  cursor?: string;
+}
+
+interface AdminListUsersResponse {
+  users: AdminUserListItem[];
+  nextCursor: string | null;
+}
+
+function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserListItem {
+  const data = doc.data();
+  const createdAt = data.createdAt;
+  return {
+    uid: doc.id,
+    username: (data.username as string) ?? null,
+    displayName: (data.displayName as string) ?? null,
+    photoURL: (data.photoURL as string) ?? null,
+    email: (data.email as string) ?? null,
+    phone: (data.phone as string) ?? null,
+    // Every existing user doc predates this field — treat a missing value as
+    // 'active' rather than excluding legacy users from the default view.
+    status: (data.status as AdminUserListItem['status']) ?? 'active',
+    emailVerified: Boolean(data.emailVerified),
+    phoneVerified: Boolean(data.phoneVerified),
+    followerCount: typeof data.followerCount === 'number' ? data.followerCount : 0,
+    followingCount: typeof data.followingCount === 'number' ? data.followingCount : 0,
+    createdAt: createdAt?.toDate?.().toISOString() ?? null,
+  };
+}
+
+/**
+ * Paginated, filterable admin user list — server-brokered since `users` is
+ * owner-only-read by rule. Cursor-based (startAfter), never a full-collection
+ * scan. Sorted by `createdAt` only (not `followerCount`): interactions.ts's
+ * getSuggestedUsers already documents why — followerCount is only ever set
+ * the first time someone receives a follow, so Firestore's orderBy would
+ * silently exclude every user who's never been followed. createdAt is set
+ * via serverTimestamp() for every user at signup, so it can never do that.
+ * `status`/`verified` filters need composite indexes (see
+ * firestore.indexes.json); the unfiltered case needs none (single-field,
+ * auto-indexed).
+ */
+export const adminListUsers = onCall<AdminListUsersRequest, Promise<AdminListUsersResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+  if (!request.auth || request.auth.token.admin !== true) {
+    throw new HttpsError('permission-denied', 'Not authorized.');
+  }
+
+  const {status, verified, sortDir = 'desc', cursor} = request.data ?? {};
+  const pageSize = clampLimit(request.data?.pageSize, 50, 20);
+
+  let q: Query<DocumentData> = db.collection('users');
+  if (status) {
+    q = q.where('status', '==', status);
+  }
+  if (verified === true) {
+    q = q.where('emailVerified', '==', true);
+  }
+  q = q.orderBy('createdAt', sortDir).orderBy('__name__', sortDir).limit(pageSize);
+
+  if (cursor) {
+    const cursorSnap = await db.collection('users').doc(cursor).get();
+    if (cursorSnap.exists) {
+      q = q.startAfter(cursorSnap.get('createdAt'), cursorSnap.id);
+    }
+  }
+
+  const snap = await q.get();
+  const users = snap.docs.map(toListItem);
+  const nextCursor = snap.docs.length === pageSize ? snap.docs[snap.docs.length - 1].id : null;
+
+  return {users, nextCursor};
+});
