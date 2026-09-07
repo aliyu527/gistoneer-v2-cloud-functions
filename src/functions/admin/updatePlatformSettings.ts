@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {getPlatformSettings, invalidatePlatformSettingsCache} from '../../lib/platformSettings';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {notifyAdmins} from '../../adminNotifications/service';
 
 const MAX_MESSAGE_LENGTH = 200;
 const MIN_SIZE_MB = 1;
@@ -68,6 +69,9 @@ export const updatePlatformSettings = onCall<UpdatePlatformSettingsRequest, Prom
   const update: Record<string, unknown> = {};
   const changes: string[] = [];
 
+  let maintenanceJustEnabled = false;
+  const justDisabledFeatures: string[] = [];
+
   for (const field of BOOLEAN_FIELDS) {
     const nextValue = data[field.key] as boolean | undefined;
     if (nextValue === undefined) continue;
@@ -75,6 +79,11 @@ export const updatePlatformSettings = onCall<UpdatePlatformSettingsRequest, Prom
     if (nextValue !== currentValue) {
       update[field.storagePath] = nextValue;
       changes.push(`${field.label}: ${currentValue} → ${nextValue}`);
+      if (field.key === 'maintenanceModeEnabled' && nextValue === true) {
+        maintenanceJustEnabled = true;
+      } else if (field.key !== 'maintenanceModeEnabled' && nextValue === false) {
+        justDisabledFeatures.push(field.label);
+      }
     }
   }
 
@@ -116,6 +125,36 @@ export const updatePlatformSettings = onCall<UpdatePlatformSettingsRequest, Prom
       targetType: 'settings',
       targetId: 'platform',
       reason: change,
+    }).catch(() => {});
+  }
+
+  if (maintenanceJustEnabled) {
+    await notifyAdmins({
+      type: 'settings.maintenance_enabled',
+      category: 'settings',
+      priority: 'critical',
+      title: 'Maintenance mode enabled',
+      message: 'Maintenance mode was turned on — new registrations, posts, comments, live sessions, and marketplace activity are now blocked.',
+      targetPermission: 'settings.write',
+      resourceType: 'settings',
+      resourceId: 'platform',
+      actionUrl: '/settings',
+      excludeUids: [admin.uid],
+      createdBy: admin.uid,
+    }).catch(() => {});
+  } else if (justDisabledFeatures.length > 0) {
+    await notifyAdmins({
+      type: 'settings.feature_disabled',
+      category: 'settings',
+      priority: 'high',
+      title: 'Platform feature disabled',
+      message: `${justDisabledFeatures.join(', ')} ${justDisabledFeatures.length === 1 ? 'was' : 'were'} turned off.`,
+      targetPermission: 'settings.write',
+      resourceType: 'settings',
+      resourceId: 'platform',
+      actionUrl: '/settings',
+      excludeUids: [admin.uid],
+      createdBy: admin.uid,
     }).catch(() => {});
   }
 

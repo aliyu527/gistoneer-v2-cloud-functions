@@ -3,6 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {enforceRateLimit} from '../../lib/rateLimit';
 import {isValidReason, resolveTargetSnapshot, type ReportTargetType} from '../../reports/service';
+import {notifyAdmins} from '../../adminNotifications/service';
 
 const TARGET_TYPES: ReportTargetType[] = ['user', 'post', 'comment', 'sound', 'live', 'vendor', 'listing'];
 const MAX_DESCRIPTION_LENGTH = 500;
@@ -73,6 +74,29 @@ export const submitReport = onCall<SubmitReportRequest, Promise<SubmitReportResp
     targetSnapshot: snapshot,
     createdAt: FieldValue.serverTimestamp(),
   });
+
+  const otherPendingSnap = await db
+    .collection('reports')
+    .where('targetType', '==', data.targetType)
+    .where('targetId', '==', targetId)
+    .where('status', '==', 'pending')
+    .count()
+    .get();
+  const priority = otherPendingSnap.data().count > 2 ? 'high' : 'normal';
+
+  await notifyAdmins({
+    type: 'report.submitted',
+    category: 'moderation',
+    priority,
+    title: 'New report submitted',
+    message: `${snapshot.label} was reported for "${data.reason}."`,
+    targetPermission: 'reports.read',
+    resourceType: 'report',
+    resourceId: ref.id,
+    actionUrl: `/reports/${ref.id}`,
+    excludeUids: [uid],
+    createdBy: uid,
+  }).catch(() => {});
 
   return {reportId: ref.id};
 });

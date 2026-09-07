@@ -6,6 +6,7 @@ import {countActiveSuperAdmins} from './adminUsersShared';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {enforceRateLimit} from '../../lib/rateLimit';
 import {writeAuditLog} from './writeAuditLog';
+import {notifyAdmins} from '../../adminNotifications/service';
 import type {AdminRole} from './bootstrapAdmin';
 
 const VALID_ROLES: AdminRole[] = ['super_admin', 'admin', 'moderator', 'support'];
@@ -74,6 +75,20 @@ export const adminUpdateAdminRole = onCall<AdminUpdateAdminRoleRequest, Promise<
     actorOverride: {displayName: 'Gistoneer'},
     type: 'admin_role_changed',
     reason: `Your admin role changed from ${previousRole} to ${role}.`,
+  }).catch(() => {});
+
+  await notifyAdmins({
+    type: 'admin.role_changed',
+    category: 'admin',
+    priority: previousRole === 'super_admin' || role === 'super_admin' ? 'critical' : 'high',
+    title: 'Administrator role changed',
+    message: `${data.email ?? targetUid}'s role changed from ${previousRole} to ${role}.`,
+    targetPermission: 'admins.manage',
+    resourceType: 'admin',
+    resourceId: targetUid,
+    actionUrl: `/admin-users/${targetUid}`,
+    excludeUids: [admin.uid, targetUid],
+    createdBy: admin.uid,
   }).catch(() => {});
 
   await writeAuditLog({

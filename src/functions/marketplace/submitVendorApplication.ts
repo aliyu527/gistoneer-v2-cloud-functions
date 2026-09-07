@@ -5,6 +5,7 @@ import {buildPublicUrl} from '../../lib/s3';
 import {isValidCategory, verifyUpload} from '../../marketplace/service';
 import {getPlatformSettings} from '../../lib/platformSettings';
 import {enforceRateLimit} from '../../lib/rateLimit';
+import {notifyAdmins} from '../../adminNotifications/service';
 
 const BUSINESS_TYPES = ['individual', 'registered_business'] as const;
 type BusinessType = (typeof BUSINESS_TYPES)[number];
@@ -135,6 +136,20 @@ export const submitVendorApplication = onCall<SubmitVendorApplicationRequest, Pr
       },
       {merge: true},
     );
+
+    await notifyAdmins({
+      type: 'vendor.application_created',
+      category: 'marketplace',
+      priority: 'normal',
+      title: 'New vendor application',
+      message: `${shopName} submitted a vendor application.`,
+      targetPermission: 'marketplace.vendors.manage',
+      resourceType: 'vendor',
+      resourceId: uid,
+      actionUrl: `/marketplace/vendors/${uid}`,
+      excludeUids: [uid],
+      createdBy: uid,
+    }).catch(() => {});
 
     return {status: 'pending'};
   },

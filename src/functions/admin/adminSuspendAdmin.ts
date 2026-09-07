@@ -6,6 +6,7 @@ import {countActiveSuperAdmins} from './adminUsersShared';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {enforceRateLimit} from '../../lib/rateLimit';
 import {writeAuditLog} from './writeAuditLog';
+import {notifyAdmins} from '../../adminNotifications/service';
 import type {AdminRole} from './bootstrapAdmin';
 
 interface AdminSuspendAdminRequest {
@@ -67,6 +68,20 @@ export const adminSuspendAdmin = onCall<AdminSuspendAdminRequest, Promise<AdminS
     actorOverride: {displayName: 'Gistoneer'},
     type: 'admin_suspended',
     reason,
+  }).catch(() => {});
+
+  await notifyAdmins({
+    type: 'admin.suspended',
+    category: 'admin',
+    priority: role === 'super_admin' ? 'critical' : 'high',
+    title: 'Administrator suspended',
+    message: `${data.email ?? targetUid}'s admin access was suspended.`,
+    targetPermission: 'admins.manage',
+    resourceType: 'admin',
+    resourceId: targetUid,
+    actionUrl: `/admin-users/${targetUid}`,
+    excludeUids: [admin.uid, targetUid],
+    createdBy: admin.uid,
   }).catch(() => {});
 
   await writeAuditLog({

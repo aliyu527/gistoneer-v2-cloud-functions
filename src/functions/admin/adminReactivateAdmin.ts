@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {notifyAdmins} from '../../adminNotifications/service';
 
 interface AdminReactivateAdminRequest {
   targetUid: string;
@@ -27,7 +28,8 @@ export const adminReactivateAdmin = onCall<AdminReactivateAdminRequest, Promise<
   if (!snap.exists) {
     throw new HttpsError('not-found', 'This administrator could not be found.');
   }
-  if (snap.data()?.status !== 'suspended') {
+  const data = snap.data()!;
+  if (data.status !== 'suspended') {
     throw new HttpsError('failed-precondition', 'Only a suspended administrator can be reactivated.');
   }
 
@@ -38,6 +40,20 @@ export const adminReactivateAdmin = onCall<AdminReactivateAdminRequest, Promise<
     actorId: 'system',
     actorOverride: {displayName: 'Gistoneer'},
     type: 'admin_reactivated',
+  }).catch(() => {});
+
+  await notifyAdmins({
+    type: 'admin.reactivated',
+    category: 'admin',
+    priority: 'normal',
+    title: 'Administrator reactivated',
+    message: `${data.email ?? targetUid}'s admin access was reactivated.`,
+    targetPermission: 'admins.manage',
+    resourceType: 'admin',
+    resourceId: targetUid,
+    actionUrl: `/admin-users/${targetUid}`,
+    excludeUids: [admin.uid, targetUid],
+    createdBy: admin.uid,
   }).catch(() => {});
 
   await writeAuditLog({

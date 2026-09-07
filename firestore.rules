@@ -322,6 +322,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // adminNotifications/{id} — Admin Notification System. Each doc targets
+    // one recipient admin (recipientId). Fully server-only, matching the
+    // regular notifications/{id} collection's own precedent (that collection
+    // is also allow write: if false even for isRead — mark-as-read goes
+    // through markNotificationRead, never a direct client field update) —
+    // not the users/{uid} partial-field-allowlist pattern. Every read
+    // (getAdminNotifications, getUnreadAdminNotificationCount) and mutation
+    // (markAdminNotificationRead, markAllAdminNotificationsRead) goes through
+    // a callable that independently verifies recipientId == request.auth.uid,
+    // since these rules give the client no access to lean on at all.
+    match /adminNotifications/{id} {
+      allow read, write: if false;
+    }
+
     // settings/{docId} — Module 13. Platform-wide feature flags, maintenance
     // mode, and media size limits (settings/platform). Server-only like every
     // other admin-adjacent collection here: read via getPlatformSettings()'s

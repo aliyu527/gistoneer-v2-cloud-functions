@@ -5,6 +5,7 @@ import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
 import {enforceRateLimit} from '../../lib/rateLimit';
+import {notifyAdmins} from '../../adminNotifications/service';
 import type {AdminRole} from './bootstrapAdmin';
 
 const VALID_ROLES: AdminRole[] = ['super_admin', 'admin', 'moderator', 'support'];
@@ -69,6 +70,20 @@ export const adminAddAdmin = onCall<AdminAddAdminRequest, Promise<AdminAddAdminR
     actorId: 'system',
     actorOverride: {displayName: 'Gistoneer'},
     type: 'admin_access_granted',
+  }).catch(() => {});
+
+  await notifyAdmins({
+    type: 'admin.created',
+    category: 'admin',
+    priority: 'high',
+    title: 'New administrator added',
+    message: `${userRecord.email ?? targetUid} was granted ${role} access.`,
+    targetPermission: 'admins.manage',
+    resourceType: 'admin',
+    resourceId: targetUid,
+    actionUrl: `/admin-users/${targetUid}`,
+    excludeUids: [admin.uid, targetUid],
+    createdBy: admin.uid,
   }).catch(() => {});
 
   await writeAuditLog({
