@@ -1,6 +1,7 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {resolveRange, buildBuckets, type DashboardRangeInput} from './dashboardRange';
+import {requireActiveAdminAny} from './requireActiveAdmin';
 
 export interface UserGrowthPoint {
   date: string;
@@ -18,9 +19,7 @@ interface UserGrowthResponse {
  * applies just as much to a chart as to a single number.
  */
 export const getUserGrowthSeries = onCall<DashboardRangeInput, Promise<UserGrowthResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdminAny(request);
 
   const {start, end} = resolveRange(request.data ?? {});
   const buckets = buildBuckets(start, end);

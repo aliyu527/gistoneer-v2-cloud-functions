@@ -1,6 +1,7 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {resolveRange, type DashboardRangeInput} from './dashboardRange';
+import {requireActiveAdminAny} from './requireActiveAdmin';
 
 interface OverviewResponse {
   totalUsers: number;
@@ -21,9 +22,7 @@ interface OverviewResponse {
  * nothing in this codebase used aggregation queries before this module).
  */
 export const getDashboardOverview = onCall<DashboardRangeInput, Promise<OverviewResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdminAny(request);
 
   const {start, end, previousStart, previousEnd} = resolveRange(request.data ?? {});
 

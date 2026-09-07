@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface HideContentRequest {
   postId: string;
@@ -23,6 +24,7 @@ interface HideContentResponse {
  */
 export const hideContent = onCall<HideContentRequest, Promise<HideContentResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'content.moderate');
+  await enforceRateLimit(admin.uid, 'hideContent', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const postId = request.data?.postId;
   const reason = request.data?.reason;

@@ -311,6 +311,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // admins/{uid} — Module 04+. The RBAC source of truth (role, status),
+    // re-read live by requireActiveAdmin on every privileged call. Module 14:
+    // this was previously only covered by the file's closing default-deny
+    // catch-all rather than an explicit block like every other sensitive
+    // collection — made explicit here for the same defense-in-depth/
+    // self-documentation reasons, no behavior change (still fully
+    // server-only via the Admin SDK).
+    match /admins/{uid} {
+      allow read, write: if false;
+    }
+
     // settings/{docId} — Module 13. Platform-wide feature flags, maintenance
     // mode, and media size limits (settings/platform). Server-only like every
     // other admin-adjacent collection here: read via getPlatformSettings()'s

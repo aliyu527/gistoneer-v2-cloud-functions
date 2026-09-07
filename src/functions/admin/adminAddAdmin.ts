@@ -4,6 +4,7 @@ import {auth, db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 import type {AdminRole} from './bootstrapAdmin';
 
 const VALID_ROLES: AdminRole[] = ['super_admin', 'admin', 'moderator', 'support'];
@@ -30,6 +31,7 @@ interface AdminAddAdminResponse {
  */
 export const adminAddAdmin = onCall<AdminAddAdminRequest, Promise<AdminAddAdminResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'admins.manage');
+  await enforceRateLimit(admin.uid, 'adminAddAdmin', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
 
   const targetUid = request.data?.targetUid;
   const role = request.data?.role;

@@ -29,7 +29,8 @@ export type Permission =
   | 'settings.read'
   | 'settings.write'
   | 'admins.read'
-  | 'admins.manage';
+  | 'admins.manage'
+  | 'audit.read';
 
 const ALL_PERMISSIONS: Permission[] = [
   'users.read',
@@ -55,6 +56,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'settings.write',
   'admins.read',
   'admins.manage',
+  'audit.read',
 ];
 
 export const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {

@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {buildPublicUrl} from '../../lib/s3';
 import {isValidCategory, verifyUpload} from '../../marketplace/service';
 import {getPlatformSettings} from '../../lib/platformSettings';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 const LISTING_TYPES = ['product', 'service'] as const;
 type ListingType = (typeof LISTING_TYPES)[number];
@@ -76,6 +77,7 @@ export const createListing = onCall<CreateListingRequest, Promise<CreateListingR
   }
 
   const uid = request.auth.uid;
+  await enforceRateLimit(uid, 'createListing', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
   const data = request.data ?? ({} as CreateListingRequest);
 
   const vendorSnap = await db.collection('vendors').doc(uid).get();

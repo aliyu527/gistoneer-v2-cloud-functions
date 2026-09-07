@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {countActiveSuperAdmins} from './adminUsersShared';
 import {requireActiveAdmin} from './requireActiveAdmin';
+import {enforceRateLimit} from '../../lib/rateLimit';
 import {writeAuditLog} from './writeAuditLog';
 import type {AdminRole} from './bootstrapAdmin';
 
@@ -26,6 +27,7 @@ interface AdminSuspendAdminResponse {
  */
 export const adminSuspendAdmin = onCall<AdminSuspendAdminRequest, Promise<AdminSuspendAdminResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'admins.manage');
+  await enforceRateLimit(admin.uid, 'adminSuspendAdmin', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
 
   const targetUid = request.data?.targetUid;
   const reason = request.data?.reason?.trim();

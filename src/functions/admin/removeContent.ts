@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface RemoveContentRequest {
   postId: string;
@@ -24,6 +25,7 @@ interface RemoveContentResponse {
  */
 export const removeContent = onCall<RemoveContentRequest, Promise<RemoveContentResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'content.delete');
+  await enforceRateLimit(admin.uid, 'removeContent', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const postId = request.data?.postId;
   const reason = request.data?.reason;

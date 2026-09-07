@@ -3,6 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {buildPublicUrl} from '../../lib/s3';
 import {isValidCategory, verifyUpload} from '../../marketplace/service';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 const CONDITIONS = ['new', 'used'] as const;
 const PRICING_MODELS = ['fixed', 'hourly', 'starting_at', 'negotiable', 'contact_for_quote'] as const;
@@ -50,6 +51,7 @@ export const updateListing = onCall<UpdateListingRequest, Promise<UpdateListingR
     throw new HttpsError('unauthenticated', 'Please sign in and try again.');
   }
   const uid = request.auth.uid;
+  await enforceRateLimit(uid, 'updateListing', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
   const data = request.data ?? ({} as UpdateListingRequest);
 
   const listingId = data.listingId;

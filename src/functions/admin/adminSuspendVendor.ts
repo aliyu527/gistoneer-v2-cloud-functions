@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {cascadeVendorStatusToListings} from '../../marketplace/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface AdminSuspendVendorRequest {
   vendorId: string;
@@ -18,6 +19,7 @@ interface AdminSuspendVendorResponse {
 /** Only an 'approved' vendor can be suspended. Cascades vendorStatus:'suspended' onto every listing they own — the only way suspending them actually stops their products/services from showing up in browse/search (Firestore can't join to a live vendor doc in a query). */
 export const adminSuspendVendor = onCall<AdminSuspendVendorRequest, Promise<AdminSuspendVendorResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'marketplace.vendors.manage');
+  await enforceRateLimit(admin.uid, 'adminSuspendVendor', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const vendorId = request.data?.vendorId;
   const reason = request.data?.reason?.trim();

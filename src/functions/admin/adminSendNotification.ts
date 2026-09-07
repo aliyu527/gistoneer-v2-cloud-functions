@@ -3,6 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 type AudienceType = 'all' | 'active' | 'user';
 
@@ -66,6 +67,7 @@ export const adminSendNotification = onCall<AdminSendNotificationRequest, Promis
   {cors: true, region: 'us-central1', timeoutSeconds: 300},
   async (request) => {
     const admin = await requireActiveAdmin(request, 'notifications.send');
+    await enforceRateLimit(admin.uid, 'adminSendNotification', {maxPerWindow: 5, windowMs: 60 * 60 * 1000});
 
     const title = request.data?.title?.trim();
     const body = request.data?.body?.trim();

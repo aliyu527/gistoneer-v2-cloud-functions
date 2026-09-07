@@ -1,7 +1,8 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import {AggregateField} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {resolveRange, type DashboardRangeInput} from './dashboardRange';
+import {requireActiveAdminAny} from './requireActiveAdmin';
 
 interface EngagementResponse {
   likes: number;
@@ -17,9 +18,7 @@ interface EngagementResponse {
  * downloading every matching post to add up counts.likes by hand.
  */
 export const getEngagementSummary = onCall<DashboardRangeInput, Promise<EngagementResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdminAny(request);
 
   const {start, end} = resolveRange(request.data ?? {});
 

@@ -1,5 +1,6 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
+import {requireActiveAdminAny} from './requireActiveAdmin';
 
 const TOP_CONTENT_LIMIT = 5;
 
@@ -30,9 +31,7 @@ interface TopContentResponse {
  * Analytics drill-down wanting more than the Dashboard's 5.
  */
 export const getTopContent = onCall<TopContentRequest, Promise<TopContentResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdminAny(request);
 
   const requestedLimit = request.data?.limit;
   const limit = requestedLimit && requestedLimit > 0 ? Math.min(requestedLimit, 20) : TOP_CONTENT_LIMIT;

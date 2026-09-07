@@ -4,6 +4,7 @@ import {auth, db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface SuspendUserRequest {
   uid: string;
@@ -26,6 +27,7 @@ interface SuspendUserResponse {
  */
 export const suspendUser = onCall<SuspendUserRequest, Promise<SuspendUserResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'users.suspend');
+  await enforceRateLimit(admin.uid, 'suspendUser', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const uid = request.data?.uid;
   const reason = request.data?.reason;

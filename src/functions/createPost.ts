@@ -6,6 +6,7 @@ import {normalizeHashtag, normalizeUsername} from '../lib/normalize';
 import {normalizeAndValidateUrl} from '../lib/urlValidation';
 import {verifyExistingUserIds} from '../lib/userVerification';
 import {getSoundDetail} from '../sounds/service';
+import {enforceRateLimit} from '../lib/rateLimit';
 import {createNotification} from '../notifications/service';
 import {getPlatformSettings} from '../lib/platformSettings';
 
@@ -152,6 +153,7 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
     }
 
     const uid = request.auth.uid;
+    await enforceRateLimit(uid, 'createPost', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
     const data = request.data ?? ({} as CreatePostRequest);
 
     // Idempotency: the client's upload queue sends the same clientPostId on

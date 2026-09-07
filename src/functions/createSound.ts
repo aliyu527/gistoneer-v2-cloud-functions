@@ -4,6 +4,7 @@ import {logger} from 'firebase-functions/v2';
 import {db} from '../admin';
 import {buildPublicUrl, getObjectBuffer} from '../lib/s3';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY} from '../config';
+import {enforceRateLimit} from '../lib/rateLimit';
 
 const MAX_TITLE_LENGTH = 200;
 const DEFAULT_TITLE = 'Untitled Sound';
@@ -115,6 +116,7 @@ export const createSound = onCall<CreateSoundRequest, Promise<CreateSoundRespons
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');
     }
     const uid = request.auth.uid;
+    await enforceRateLimit(uid, 'createSound', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
     const data = request.data ?? ({} as CreateSoundRequest);
 
     if (typeof data.clientSoundId !== 'string' || data.clientSoundId.length === 0 || data.clientSoundId.length > 200) {

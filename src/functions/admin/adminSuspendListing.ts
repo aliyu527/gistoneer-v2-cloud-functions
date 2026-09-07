@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface AdminSuspendListingRequest {
   listingId: string;
@@ -18,6 +19,7 @@ interface AdminSuspendListingResponse {
 /** Only a currently 'published' listing can be suspended (a draft/archived listing isn't publicly visible anyway; a listing owned by an already-suspended vendor is redundant to suspend individually). Single permission tier, matching sounds' exact pattern — no separate delete permission exists or is needed here either. */
 export const adminSuspendListing = onCall<AdminSuspendListingRequest, Promise<AdminSuspendListingResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   const admin = await requireActiveAdmin(request, 'marketplace.moderate');
+  await enforceRateLimit(admin.uid, 'adminSuspendListing', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const listingId = request.data?.listingId;
   const reason = request.data?.reason?.trim();

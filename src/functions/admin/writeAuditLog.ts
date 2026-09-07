@@ -1,4 +1,5 @@
 import {FieldValue} from 'firebase-admin/firestore';
+import {logger} from 'firebase-functions/v2';
 import {db} from '../../admin';
 
 export type AdminAuditAction =
@@ -49,14 +50,24 @@ interface AdminAuditLogInput {
  * already happened by the time this is called). Returns the resulting doc's
  * id (harmless addition — every existing caller already ignores the return
  * value).
+ *
+ * Module 14: the Firestore write itself is now wrapped internally — a
+ * failure is logged via logger.error (surfaces in Cloud Logging/alerting)
+ * instead of vanishing silently into a caller's `.catch(() => {})`. Still
+ * never throws, so no existing call site needs to change.
  */
 export async function writeAuditLog(entry: AdminAuditLogInput): Promise<string> {
   const {docId, ...rest} = entry;
   const payload = {...rest, createdAt: FieldValue.serverTimestamp()};
-  if (docId) {
-    await db.collection('adminAuditLogs').doc(docId).set(payload);
-    return docId;
+  try {
+    if (docId) {
+      await db.collection('adminAuditLogs').doc(docId).set(payload);
+      return docId;
+    }
+    const ref = await db.collection('adminAuditLogs').add(payload);
+    return ref.id;
+  } catch (error) {
+    logger.error('writeAuditLog failed', {action: entry.action, targetType: entry.targetType, targetId: entry.targetId, actorUid: entry.actorUid, error});
+    return docId ?? '';
   }
-  const ref = await db.collection('adminAuditLogs').add(payload);
-  return ref.id;
 }

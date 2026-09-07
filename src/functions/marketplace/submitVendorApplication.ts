@@ -4,6 +4,7 @@ import {db} from '../../admin';
 import {buildPublicUrl} from '../../lib/s3';
 import {isValidCategory, verifyUpload} from '../../marketplace/service';
 import {getPlatformSettings} from '../../lib/platformSettings';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 const BUSINESS_TYPES = ['individual', 'registered_business'] as const;
 type BusinessType = (typeof BUSINESS_TYPES)[number];
@@ -54,6 +55,7 @@ export const submitVendorApplication = onCall<SubmitVendorApplicationRequest, Pr
     }
 
     const uid = request.auth.uid;
+    await enforceRateLimit(uid, 'submitVendorApplication', {maxPerWindow: 20, windowMs: 10 * 60 * 1000});
     const data = request.data ?? ({} as SubmitVendorApplicationRequest);
 
     const existing = await db.collection('vendors').doc(uid).get();

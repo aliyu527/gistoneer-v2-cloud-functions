@@ -1,5 +1,6 @@
-import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
+import {requireActiveAdminAny} from './requireActiveAdmin';
 
 const MAX_LIVE_SESSIONS = 5;
 
@@ -23,9 +24,7 @@ interface LiveNowResponse {
  * unlike the mobile app's own public-only live feed query.
  */
 export const getLiveNow = onCall<undefined, Promise<LiveNowResponse>>({cors: true, region: 'us-central1'}, async (request) => {
-  if (!request.auth || request.auth.token.admin !== true) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
-  }
+  await requireActiveAdminAny(request);
 
   const [listSnap, countSnap] = await Promise.all([
     db.collection('liveSessions').where('status', '==', 'live').orderBy('viewerCount', 'desc').limit(MAX_LIVE_SESSIONS).get(),

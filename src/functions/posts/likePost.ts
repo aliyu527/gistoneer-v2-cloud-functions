@@ -1,5 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {likePost as likePostService} from '../../posts/interactions';
+import {enforceRateLimit} from '../../lib/rateLimit';
 
 interface LikePostRequest {
   postId: string;
@@ -14,6 +15,7 @@ export const likePost = onCall<LikePostRequest, Promise<{liked: true}>>({cors: t
     throw new HttpsError('invalid-argument', 'Missing post reference.');
   }
 
+  await enforceRateLimit(request.auth.uid, 'likePost', {maxPerWindow: 60, windowMs: 10 * 60 * 1000});
   await likePostService(request.auth.uid, postId);
   return {liked: true};
 });

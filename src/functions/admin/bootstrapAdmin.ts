@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {auth, db} from '../../admin';
+import {writeAuditLog} from './writeAuditLog';
 
 /** The one deploy account — there's no admin/role system anywhere in this codebase to reuse (same gate backfillSoundVisibility.ts already uses). Only this account can ever grant the admin custom claim. */
 const ALLOWED_EMAIL = 'gistoneer@gmail.com';
@@ -21,18 +22,25 @@ interface BootstrapAdminResponse {
 }
 
 /**
- * The only way any admin ever gets provisioned before Module 12 builds a
- * real invitation UI — deliberately NOT a public "/register-admin" (spec
- * explicitly forbids that). Gated by the exact same hardcoded-operator-email
- * check as backfillSoundVisibility.ts, so it's safe to leave deployed
- * permanently rather than one-shot: nobody but that account can ever call
- * it, regardless of what the client sends.
+ * Module 14: hardened from "permanently deployed, gated only by one hardcoded
+ * email" (a single compromised Gmail session could otherwise mint arbitrary
+ * super_admins forever) into a true ONE-TIME bootstrap — it now refuses to
+ * run at all once any active admin already exists, since Module 12's real
+ * Add Administrator flow (adminAddAdmin.ts) is the correct path from that
+ * point on. Safe to leave deployed permanently: the hardcoded-email gate
+ * still applies for the one legitimate call (fresh project, zero admins),
+ * and every call after that is a no-op regardless of who calls it.
  */
 export const bootstrapAdmin = onCall<BootstrapAdminRequest, Promise<BootstrapAdminResponse>>(
   {cors: true, region: 'us-central1'},
   async (request) => {
     if (!request.auth || request.auth.token.email !== ALLOWED_EMAIL) {
       throw new HttpsError('permission-denied', 'Not authorized.');
+    }
+
+    const existingActiveAdmin = await db.collection('admins').where('status', '==', 'active').limit(1).get();
+    if (!existingActiveAdmin.empty) {
+      throw new HttpsError('failed-precondition', 'Bootstrap already completed — use Add Administrator in the Admin Panel to grant access to additional users.');
     }
 
     const role = request.data?.role ?? 'super_admin';
@@ -77,6 +85,15 @@ export const bootstrapAdmin = onCall<BootstrapAdminRequest, Promise<BootstrapAdm
       },
       {merge: true},
     );
+
+    await writeAuditLog({
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email ?? null,
+      action: 'admin.create',
+      targetType: 'admin',
+      targetId: targetUid,
+      reason: 'Initial admin bootstrap',
+    }).catch(() => {});
 
     return {uid: targetUid, role};
   },
