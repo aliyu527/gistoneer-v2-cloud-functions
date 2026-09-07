@@ -5,6 +5,7 @@ import {createNotification} from '../notifications/service';
 import {agoraUidFor} from './agoraUid';
 import {provisionIngestCredentials, type IngestCredentials} from './mediaGateway';
 import {startRecording, stopRecording} from './recording';
+import {getPlatformSettings} from '../lib/platformSettings';
 
 const FOLLOWER_NOTIFY_BATCH_SIZE = 400; // headroom under Firestore's 500-write batch limit
 const MAX_SPEAKERS = 4; // concurrent approved speakers, enforced in approveSpeaker — Brekete (the reference) has no cap at all
@@ -24,6 +25,14 @@ interface CreateLiveSessionInput {
  * cached onto the doc rather than re-joined on every feed render).
  */
 export async function createLiveSession(hostId: string, {title, visibility, sourceType = 'camera'}: CreateLiveSessionInput): Promise<string> {
+  const settings = await getPlatformSettings();
+  if (settings.maintenanceMode.enabled) {
+    throw new HttpsError('failed-precondition', settings.maintenanceMode.message || 'Gistoneer is under maintenance. Please try again shortly.');
+  }
+  if (!settings.liveBroadcastingEnabled) {
+    throw new HttpsError('failed-precondition', 'Live broadcasting is temporarily disabled. Please try again later.');
+  }
+
   const hostSnap = await db.collection('users').doc(hostId).get();
   const host = hostSnap.data() ?? {};
   const hostName = (host.displayName as string) || (host.username as string) || 'Gistoneer user';

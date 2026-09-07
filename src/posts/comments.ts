@@ -3,6 +3,7 @@ import {HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
 import {enforceRateLimit} from '../lib/rateLimit';
 import {createNotification} from '../notifications/service';
+import {getPlatformSettings} from '../lib/platformSettings';
 
 const MAX_COMMENT_LENGTH = 500;
 const DEFAULT_COMMENTS_LIMIT = 50;
@@ -58,6 +59,14 @@ function toPostComment(id: string, data: FirebaseFirestore.DocumentData): PostCo
  * trusting the client to have already checked it — applies to replies too.
  */
 export async function createComment(uid: string, postId: string, text: string, parentCommentId: string | null): Promise<PostComment> {
+  const settings = await getPlatformSettings();
+  if (settings.maintenanceMode.enabled) {
+    throw new HttpsError('failed-precondition', settings.maintenanceMode.message || 'Gistoneer is under maintenance. Please try again shortly.');
+  }
+  if (!settings.commentsEnabled) {
+    throw new HttpsError('failed-precondition', 'Comments are temporarily disabled. Please try again later.');
+  }
+
   await enforceRateLimit(uid, 'createComment', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
   const trimmed = text.trim();

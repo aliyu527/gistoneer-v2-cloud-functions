@@ -26,13 +26,14 @@ export type AdminAuditAction =
   | 'admin.create'
   | 'admin.role_change'
   | 'admin.suspend'
-  | 'admin.reactivate';
+  | 'admin.reactivate'
+  | 'settings.update';
 
 interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification' | 'vendor' | 'listing' | 'comment' | 'report' | 'admin';
+  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification' | 'vendor' | 'listing' | 'comment' | 'report' | 'admin' | 'settings';
   targetId: string;
   reason: string | null;
   /** Module 08: lets a notification "campaign" carry its own rich record (title/body/audience/recipientCount) without a second collection — adminAuditLogs is already the source of truth for "who did what, when." */

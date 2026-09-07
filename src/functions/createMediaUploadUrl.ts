@@ -4,7 +4,10 @@ import {db} from '../admin';
 import {generatePresignedPutUrl, getBucketName, getRegion} from '../lib/s3';
 import {validateUploadRequest, extensionForMimeType, type MediaType} from '../lib/mediaValidation';
 import {enforceRateLimit} from '../lib/rateLimit';
+import {getPlatformSettings} from '../lib/platformSettings';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY} from '../config';
+
+const MB = 1024 * 1024;
 
 interface CreateMediaUploadUrlRequest {
   mediaType: MediaType;
@@ -41,7 +44,13 @@ export const createMediaUploadUrl = onCall<CreateMediaUploadUrlRequest, Promise<
     await enforceRateLimit(uid, 'createMediaUploadUrl', {maxPerWindow: 30, windowMs: 10 * 60 * 1000});
 
     const {mediaType, mimeType, fileSize, mediaFolderId, fileName} = request.data ?? {};
-    const validationError = validateUploadRequest({mediaType, mimeType, fileSize, mediaFolderId, fileName});
+    const settings = await getPlatformSettings();
+    const maxSizeByType: Record<MediaType, number> = {
+      image: settings.mediaLimits.maxImageSizeMB * MB,
+      video: settings.mediaLimits.maxVideoSizeMB * MB,
+      audio: settings.mediaLimits.maxAudioSizeMB * MB,
+    };
+    const validationError = validateUploadRequest({mediaType, mimeType, fileSize, mediaFolderId, fileName}, maxSizeByType);
     if (validationError) {
       throw new HttpsError('invalid-argument', validationError);
     }

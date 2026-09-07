@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
 import {normalizeUsername} from '../lib/normalize';
+import {getPlatformSettings} from '../lib/platformSettings';
 import type {CompleteUserProfileRequest} from '../lib/types';
 
 const MIN_AGE_YEARS = 13;
@@ -27,6 +28,15 @@ export const completeUserProfile = onCall<CompleteUserProfileRequest, Promise<{o
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');
     }
+
+    const settings = await getPlatformSettings();
+    if (settings.maintenanceMode.enabled) {
+      throw new HttpsError('failed-precondition', settings.maintenanceMode.message || 'Gistoneer is under maintenance. Please try again shortly.');
+    }
+    if (!settings.registrationEnabled) {
+      throw new HttpsError('failed-precondition', 'New registrations are temporarily disabled. Please try again later.');
+    }
+
     const uid = request.auth.uid;
     const {username, birthday, interests} = request.data ?? {};
     const usernameLower = normalizeUsername(username ?? '');

@@ -3,6 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {buildPublicUrl} from '../../lib/s3';
 import {isValidCategory, verifyUpload} from '../../marketplace/service';
+import {getPlatformSettings} from '../../lib/platformSettings';
 
 const LISTING_TYPES = ['product', 'service'] as const;
 type ListingType = (typeof LISTING_TYPES)[number];
@@ -65,6 +66,15 @@ export const createListing = onCall<CreateListingRequest, Promise<CreateListingR
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Please sign in and try again.');
   }
+
+  const settings = await getPlatformSettings();
+  if (settings.maintenanceMode.enabled) {
+    throw new HttpsError('failed-precondition', settings.maintenanceMode.message || 'Gistoneer is under maintenance. Please try again shortly.');
+  }
+  if (!settings.marketplaceEnabled) {
+    throw new HttpsError('failed-precondition', 'Marketplace is temporarily disabled. Please try again later.');
+  }
+
   const uid = request.auth.uid;
   const data = request.data ?? ({} as CreateListingRequest);
 

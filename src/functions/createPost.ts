@@ -7,6 +7,7 @@ import {normalizeAndValidateUrl} from '../lib/urlValidation';
 import {verifyExistingUserIds} from '../lib/userVerification';
 import {getSoundDetail} from '../sounds/service';
 import {createNotification} from '../notifications/service';
+import {getPlatformSettings} from '../lib/platformSettings';
 
 const MAX_CAPTION_LENGTH = 2200; // matches the client's own TextInput maxLength
 const MAX_MEDIA_ITEMS = 10; // mirrors the client's MEDIA_LIMITS post cap
@@ -141,6 +142,15 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');
     }
+
+    const settings = await getPlatformSettings();
+    if (settings.maintenanceMode.enabled) {
+      throw new HttpsError('failed-precondition', settings.maintenanceMode.message || 'Gistoneer is under maintenance. Please try again shortly.');
+    }
+    if (!settings.postCreationEnabled) {
+      throw new HttpsError('failed-precondition', 'Posting is temporarily disabled. Please try again later.');
+    }
+
     const uid = request.auth.uid;
     const data = request.data ?? ({} as CreatePostRequest);
 

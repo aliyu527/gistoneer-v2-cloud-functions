@@ -47,7 +47,15 @@ const TOO_LARGE_MESSAGE_BY_TYPE: Record<MediaType, string> = {
   audio: 'This audio file is too large.',
 };
 
-export function validateUploadRequest(req: MediaUploadRequest): string | null {
+/**
+ * `maxSizeByType` is optional and defaults to the hardcoded MAX_SIZE_BY_TYPE
+ * above — every existing call site is unaffected until Module 13's
+ * createMediaUploadUrl.ts starts passing the admin-configurable values from
+ * settings/platform (functions/src/lib/platformSettings.ts). MIME-type
+ * allowlists are never settings-driven — that's a security boundary, not
+ * an operational knob.
+ */
+export function validateUploadRequest(req: MediaUploadRequest, maxSizeByType: Record<MediaType, number> = MAX_SIZE_BY_TYPE): string | null {
   if (req.mediaType !== 'image' && req.mediaType !== 'video' && req.mediaType !== 'audio') {
     return 'Unsupported media type.';
   }
@@ -65,7 +73,7 @@ export function validateUploadRequest(req: MediaUploadRequest): string | null {
     return "This file type isn't supported.";
   }
 
-  if (req.fileSize > MAX_SIZE_BY_TYPE[req.mediaType]) {
+  if (req.fileSize > maxSizeByType[req.mediaType]) {
     return TOO_LARGE_MESSAGE_BY_TYPE[req.mediaType];
   }
 
