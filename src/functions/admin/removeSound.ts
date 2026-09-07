@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
+import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
 
@@ -40,6 +41,15 @@ export const removeSound = onCall<RemoveSoundRequest, Promise<RemoveSoundRespons
   }
 
   await soundRef.update({moderationStatus: 'removed', updatedAt: FieldValue.serverTimestamp()});
+
+  await createNotification({
+    recipientId: soundSnap.data()!.ownerId as string,
+    actorId: 'system',
+    actorOverride: {displayName: 'Gistoneer'},
+    type: 'sound_removed',
+    soundId,
+    reason: reason.trim(),
+  }).catch(() => {});
 
   await writeAuditLog({
     actorUid: admin.uid,

@@ -135,7 +135,7 @@ export async function createComment(uid: string, postId: string, text: string, p
   };
 }
 
-/** Top-level comments only (parentCommentId == null) — replies are fetched separately, on demand, via getReplies. */
+/** Top-level comments only (parentCommentId == null) — replies are fetched separately, on demand, via getReplies. Hidden comments (Module 10 moderation) are filtered out in-memory after the query rather than via a Firestore `.where()` — comment lists are naturally small (capped at 50), so this avoids a new composite index for what's otherwise a rare, small filter. */
 export async function getComments(postId: string, limitCount: number = DEFAULT_COMMENTS_LIMIT): Promise<PostComment[]> {
   const snap = await db
     .collection('posts')
@@ -145,10 +145,10 @@ export async function getComments(postId: string, limitCount: number = DEFAULT_C
     .orderBy('createdAt', 'desc')
     .limit(limitCount)
     .get();
-  return snap.docs.map((doc) => toPostComment(doc.id, doc.data()));
+  return snap.docs.filter((doc) => doc.data().moderationStatus !== 'hidden').map((doc) => toPostComment(doc.id, doc.data()));
 }
 
-/** Direct replies to one top-level comment — newest first, same ordering as top-level comments (and reuses the same composite index). */
+/** Direct replies to one top-level comment — newest first, same ordering as top-level comments (and reuses the same composite index). Same in-memory hidden-comment filter as getComments. */
 export async function getReplies(postId: string, commentId: string, limitCount: number = DEFAULT_REPLIES_LIMIT): Promise<PostComment[]> {
   const snap = await db
     .collection('posts')
@@ -158,5 +158,5 @@ export async function getReplies(postId: string, commentId: string, limitCount: 
     .orderBy('createdAt', 'desc')
     .limit(limitCount)
     .get();
-  return snap.docs.map((doc) => toPostComment(doc.id, doc.data()));
+  return snap.docs.filter((doc) => doc.data().moderationStatus !== 'hidden').map((doc) => toPostComment(doc.id, doc.data()));
 }

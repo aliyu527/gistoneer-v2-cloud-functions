@@ -13,7 +13,15 @@ export type NotificationType =
   | 'announcement'
   | 'vendor_approved'
   | 'vendor_rejected'
-  | 'listing_suspended';
+  | 'listing_suspended'
+  | 'content_hidden'
+  | 'content_removed'
+  | 'comment_hidden'
+  | 'sound_hidden'
+  | 'sound_removed'
+  | 'user_suspended'
+  | 'user_warned'
+  | 'live_ended_by_admin';
 
 export interface NotificationActor {
   username?: string;
@@ -39,10 +47,12 @@ interface CreateNotificationInput {
   campaignId?: string;
   /** Skips the live users/{actorId} lookup and uses this directly — announcement/vendor_approved/vendor_rejected/listing_suspended's actorId ('system') has no real user doc to denormalize from. */
   actorOverride?: NotificationActor;
-  /** vendor_rejected/listing_suspended types only — the admin's stated reason. */
+  /** vendor_rejected/listing_suspended/content_hidden/content_removed/comment_hidden/sound_hidden/sound_removed/user_suspended/user_warned/live_ended_by_admin types — the admin's stated reason. */
   reason?: string;
   /** listing_suspended type only. */
   listingId?: string;
+  /** sound_hidden/sound_removed types only. */
+  soundId?: string;
 }
 
 function buildActor(userData: FirebaseFirestore.DocumentData): NotificationActor {
@@ -87,6 +97,7 @@ export async function createNotification({
   actorOverride,
   reason,
   listingId,
+  soundId,
 }: CreateNotificationInput): Promise<void> {
   // "Never notify yourself" is a social-interaction rule (liking/following/
   // tagging yourself makes no sense) — it doesn't apply to a system
@@ -96,7 +107,21 @@ export async function createNotification({
   // message (actorId is the fixed 'system' sentinel, never a real
   // recipient's own uid) — announcement, and Marketplace's
   // vendor_approved/vendor_rejected/listing_suspended.
-  const SYSTEM_TYPES: NotificationType[] = ['live_recording_ready', 'announcement', 'vendor_approved', 'vendor_rejected', 'listing_suspended'];
+  const SYSTEM_TYPES: NotificationType[] = [
+    'live_recording_ready',
+    'announcement',
+    'vendor_approved',
+    'vendor_rejected',
+    'listing_suspended',
+    'content_hidden',
+    'content_removed',
+    'comment_hidden',
+    'sound_hidden',
+    'sound_removed',
+    'user_suspended',
+    'user_warned',
+    'live_ended_by_admin',
+  ];
   if (recipientId === actorId && !SYSTEM_TYPES.includes(type)) return;
 
   const actor = actorOverride ?? buildActor((await db.collection('users').doc(actorId).get()).data() ?? {});
@@ -114,6 +139,7 @@ export async function createNotification({
     ...(body ? {body} : {}),
     ...(reason ? {reason} : {}),
     ...(listingId ? {listingId} : {}),
+    ...(soundId ? {soundId} : {}),
     isRead: false,
     createdAt: FieldValue.serverTimestamp(),
   };
@@ -128,7 +154,7 @@ export async function createNotification({
       ? `${postId}_${actorId}`
       : type === 'follow'
         ? actorId
-        : type === 'live' || type === 'live_invite'
+        : type === 'live' || type === 'live_invite' || type === 'live_ended_by_admin'
           ? liveId
           : type === 'announcement'
             ? campaignId
@@ -136,7 +162,15 @@ export async function createNotification({
               ? actorId
               : type === 'listing_suspended'
                 ? listingId
-                : postId;
+                : type === 'content_hidden' || type === 'content_removed'
+                  ? postId
+                  : type === 'comment_hidden'
+                    ? commentId
+                    : type === 'sound_hidden' || type === 'sound_removed'
+                      ? soundId
+                      : type === 'user_suspended' || type === 'user_warned'
+                        ? 'account'
+                        : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);
   await ref.set(data, {merge: true});
 }

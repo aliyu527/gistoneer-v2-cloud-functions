@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {auth, db} from '../../admin';
+import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
 
@@ -51,6 +52,14 @@ export const suspendUser = onCall<SuspendUserRequest, Promise<SuspendUserRespons
   }
 
   await userRef.update({status: 'suspended', updatedAt: FieldValue.serverTimestamp()});
+
+  await createNotification({
+    recipientId: uid,
+    actorId: 'system',
+    actorOverride: {displayName: 'Gistoneer'},
+    type: 'user_suspended',
+    reason: reason.trim(),
+  }).catch(() => {});
 
   await writeAuditLog({
     actorUid: admin.uid,

@@ -343,6 +343,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // reports/{reportId} — Module 10. Entirely callable-only in both
+    // directions, mirroring vendors/listings: submitReport writes it
+    // server-side (reporter identity, target snapshot, rate limiting all
+    // enforced there), and no client — including the reporter — reads a
+    // report directly. Reporter identity and moderation notes are
+    // investigation-only data for admins (via the Admin SDK, which bypasses
+    // these rules), never exposed to any authenticated app user.
+    match /reports/{reportId} {
+      allow read, write: if false;
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

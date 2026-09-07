@@ -2,6 +2,7 @@ import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {stopRecordingIfActive} from '../../live/service';
+import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
 
@@ -41,6 +42,15 @@ export const adminEndLiveSession = onCall<AdminEndLiveSessionRequest, Promise<Ad
   if (sessionSnap.data()?.status !== 'ended') {
     await sessionRef.update({status: 'ended', endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     await stopRecordingIfActive(liveId);
+
+    await createNotification({
+      recipientId: sessionSnap.data()!.hostId as string,
+      actorId: 'system',
+      actorOverride: {displayName: 'Gistoneer'},
+      type: 'live_ended_by_admin',
+      liveId,
+      reason: reason?.trim() || undefined,
+    }).catch(() => {});
   }
 
   await writeAuditLog({

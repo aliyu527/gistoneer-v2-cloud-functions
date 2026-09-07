@@ -1,6 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
+import {createNotification} from '../../notifications/service';
 import {requireActiveAdmin} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
 
@@ -40,6 +41,15 @@ export const removeContent = onCall<RemoveContentRequest, Promise<RemoveContentR
   }
 
   await postRef.update({moderationStatus: 'removed', updatedAt: FieldValue.serverTimestamp()});
+
+  await createNotification({
+    recipientId: postSnap.data()!.authorId as string,
+    actorId: 'system',
+    actorOverride: {displayName: 'Gistoneer'},
+    type: 'content_removed',
+    postId,
+    reason: reason.trim(),
+  }).catch(() => {});
 
   await writeAuditLog({
     actorUid: admin.uid,
