@@ -95,6 +95,7 @@ export {updateListing} from './functions/marketplace/updateListing';
 export {searchListings} from './functions/marketplace/searchListings';
 export {getListingDetail} from './functions/marketplace/getListingDetail';
 export {getMyListings} from './functions/marketplace/getMyListings';
+export {adminGetMarketplaceOverview} from './functions/admin/adminGetMarketplaceOverview';
 export {adminListVendors} from './functions/admin/adminListVendors';
 export {adminSearchVendors} from './functions/admin/adminSearchVendors';
 export {adminGetVendorDetail} from './functions/admin/adminGetVendorDetail';
