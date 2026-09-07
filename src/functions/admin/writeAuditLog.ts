@@ -28,6 +28,7 @@ export type AdminAuditAction =
   | 'admin.role_change'
   | 'admin.suspend'
   | 'admin.reactivate'
+  | 'admin.password_changed'
   | 'settings.update';
 
 interface AdminAuditLogInput {
