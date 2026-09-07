@@ -1,6 +1,6 @@
 import type {Timestamp} from 'firebase-admin/firestore';
 
-export type AdminNotificationCategory = 'marketplace' | 'moderation' | 'admin' | 'settings';
+export type AdminNotificationCategory = 'marketplace' | 'moderation' | 'admin' | 'settings' | 'catalog';
 export type AdminNotificationPriority = 'normal' | 'high' | 'critical';
 
 export type AdminNotificationType =
@@ -11,7 +11,8 @@ export type AdminNotificationType =
   | 'admin.suspended'
   | 'admin.reactivated'
   | 'settings.maintenance_enabled'
-  | 'settings.feature_disabled';
+  | 'settings.feature_disabled'
+  | 'sound.processing_failed';
 
 export interface AdminNotification {
   id: string;

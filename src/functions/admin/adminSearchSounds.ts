@@ -29,6 +29,8 @@ function toListItemUnresolved(doc: FirebaseFirestore.QueryDocumentSnapshot): Adm
     durationMs: typeof data.durationMs === 'number' ? data.durationMs : null,
     visibility: (data.visibility as AdminSoundListItem['visibility']) ?? 'public',
     moderationStatus: (data.moderationStatus as AdminSoundListItem['moderationStatus']) ?? 'active',
+    source: (data.source as AdminSoundListItem['source']) ?? 'user_upload',
+    categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
     createdAt: data.createdAt?.toDate?.().toISOString() ?? null,
   };
 }

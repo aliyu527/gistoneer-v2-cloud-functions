@@ -26,6 +26,8 @@ export interface AdminSoundListItem {
   durationMs: number | null;
   visibility: 'public' | 'private';
   moderationStatus: SoundModerationStatus;
+  source: 'user_upload' | 'admin_upload';
+  categoryIds: string[];
   createdAt: string | null;
 }
 
@@ -33,6 +35,7 @@ interface AdminListSoundsRequest {
   moderationStatus?: SoundModerationStatus;
   visibility?: 'public' | 'private';
   creatorId?: string;
+  categoryId?: string;
   sortBy?: 'createdAt' | 'title';
   sortDir?: 'asc' | 'desc';
   pageSize?: number;
@@ -90,6 +93,9 @@ function toSoundListItem(doc: FirebaseFirestore.QueryDocumentSnapshot, creators:
     visibility: (data.visibility as AdminSoundListItem['visibility']) ?? 'public',
     // Every sound created before this module predates this field.
     moderationStatus: (data.moderationStatus as SoundModerationStatus) ?? 'active',
+    // Every sound created before the Sound Catalog module predates this field.
+    source: (data.source as AdminSoundListItem['source']) ?? 'user_upload',
+    categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
     createdAt: data.createdAt?.toDate?.().toISOString() ?? null,
   };
 }
@@ -106,12 +112,14 @@ function toSoundListItem(doc: FirebaseFirestore.QueryDocumentSnapshot, creators:
 export const adminListSounds = onCall<AdminListSoundsRequest, Promise<AdminListSoundsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   await requireActiveAdmin(request, 'sounds.read');
 
-  const {moderationStatus, visibility, creatorId, sortBy = 'createdAt', sortDir = 'desc', cursor} = request.data ?? {};
+  const {moderationStatus, visibility, creatorId, categoryId, sortBy = 'createdAt', sortDir = 'desc', cursor} = request.data ?? {};
   const pageSize = clampLimit(request.data?.pageSize, 50, 20);
 
   let q: Query<DocumentData> = db.collection('sounds');
   if (creatorId) {
     q = q.where('ownerId', '==', creatorId);
+  } else if (categoryId) {
+    q = q.where('categoryIds', 'array-contains', categoryId);
   } else if (moderationStatus) {
     q = q.where('moderationStatus', '==', moderationStatus);
   } else if (visibility) {

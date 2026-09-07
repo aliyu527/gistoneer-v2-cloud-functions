@@ -85,6 +85,12 @@ export {adminGetPostsUsingSound} from './functions/admin/adminGetPostsUsingSound
 export {hideSound} from './functions/admin/hideSound';
 export {restoreSound} from './functions/admin/restoreSound';
 export {removeSound} from './functions/admin/removeSound';
+export {adminCreateSound} from './functions/admin/adminCreateSound';
+export {adminUpdateSound} from './functions/admin/adminUpdateSound';
+export {adminCreateSoundCategory} from './functions/admin/adminCreateSoundCategory';
+export {adminUpdateSoundCategory} from './functions/admin/adminUpdateSoundCategory';
+export {adminListSoundCategories} from './functions/admin/adminListSoundCategories';
+export {adminDeleteSoundCategory} from './functions/admin/adminDeleteSoundCategory';
 export {adminListPlaylists} from './functions/admin/adminListPlaylists';
 export {adminSearchPlaylists} from './functions/admin/adminSearchPlaylists';
 export {adminGetPlaylistDetail} from './functions/admin/adminGetPlaylistDetail';

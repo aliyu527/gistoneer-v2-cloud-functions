@@ -60,6 +60,7 @@ export const updateSound = onCall<UpdateSoundRequest, Promise<UpdateSoundRespons
         throw new HttpsError('invalid-argument', 'Title cannot be empty.');
       }
       updates.title = title;
+      updates.titleLower = title.toLowerCase();
     }
     if (data.artist !== undefined) updates.artist = data.artist.trim().slice(0, MAX_TAG_LENGTH) || FieldValue.delete();
     if (data.album !== undefined) updates.album = data.album.trim().slice(0, MAX_TAG_LENGTH) || FieldValue.delete();

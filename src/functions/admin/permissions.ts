@@ -17,6 +17,8 @@ export type Permission =
   | 'content.delete'
   | 'sounds.read'
   | 'sounds.moderate'
+  | 'sounds.write'
+  | 'sounds.categories.manage'
   | 'live.read'
   | 'live.moderate'
   | 'live.end'
@@ -45,6 +47,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'content.delete',
   'sounds.read',
   'sounds.moderate',
+  'sounds.write',
+  'sounds.categories.manage',
   'live.read',
   'live.moderate',
   'live.end',

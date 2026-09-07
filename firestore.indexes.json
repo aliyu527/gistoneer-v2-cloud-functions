@@ -200,6 +200,41 @@
       ]
     },
     {
+      "collectionGroup": "sounds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "categoryIds", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "source", "order": "ASCENDING"},
+        {"fieldPath": "visibility", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "sounds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "categoryIds", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "sounds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "source", "order": "ASCENDING"},
+        {"fieldPath": "visibility", "order": "ASCENDING"},
+        {"fieldPath": "titleLower", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "soundCategories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "isActive", "order": "ASCENDING"},
+        {"fieldPath": "sortOrder", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "liveSessions",
       "queryScope": "COLLECTION",
       "fields": [

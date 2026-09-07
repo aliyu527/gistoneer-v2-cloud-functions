@@ -167,6 +167,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // soundCategories/{id} — admin-managed catalog categories (Trending/
+    // Featured/Popular and genre-style browsable categories, distinguished
+    // only by reserved slugs, never a separate schema). Client-readable
+    // (mobile's category filter UI could read this directly if ever
+    // needed) but entirely server-written — adminCreateSoundCategory/
+    // adminUpdateSoundCategory are the only writers.
+    match /soundCategories/{categoryId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // soundCategorySlugs/{slug} — uniqueness reservation for category slugs,
+    // same fully-server-only shape as usernames/{usernameLower}.
+    match /soundCategorySlugs/{slug} {
+      allow read, write: if false;
+    }
+
     // playlists/{playlistId} — user-curated sound collections (Music Studio
     // Module 6). Entirely server-written: createPlaylist/updatePlaylist
     // re-verify every referenced soundId actually belongs to the caller

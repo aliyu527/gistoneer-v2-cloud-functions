@@ -96,6 +96,8 @@ export const adminGetSoundDetail = onCall<AdminGetSoundDetailRequest, Promise<Ad
     durationMs: typeof data.durationMs === 'number' ? data.durationMs : null,
     visibility: (data.visibility as AdminSoundListItem['visibility']) ?? 'public',
     moderationStatus,
+    source: (data.source as AdminSoundListItem['source']) ?? 'user_upload',
+    categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
     createdAt: data.createdAt?.toDate?.().toISOString() ?? null,
     description: (data.description as string) ?? null,
     originalFileName: (data.originalFileName as string) ?? null,

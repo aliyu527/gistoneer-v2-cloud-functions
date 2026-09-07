@@ -96,6 +96,17 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 /**
+ * Direct server-side upload of an already-in-memory buffer — for binaries
+ * the server itself generates (e.g. cover art extracted from an audio
+ * file's embedded tags) rather than a client-presigned PUT. Never used for
+ * client-supplied files, which always go through generatePresignedPutUrl so
+ * the upload happens directly from the client's device/browser to S3.
+ */
+export async function uploadBuffer(key: string, buffer: Buffer, contentType: string): Promise<void> {
+  await getClient().send(new PutObjectCommand({Bucket: getBucketName(), Key: key, Body: buffer, ContentType: contentType}));
+}
+
+/**
  * Lists every object key under a prefix (paginated via ContinuationToken —
  * a live recording's HLS segment count can exceed the 1000-key single-page
  * cap for a longer broadcast). Used by onRecordingEvent to clean up the

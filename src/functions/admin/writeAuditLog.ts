@@ -14,6 +14,14 @@ export type AdminAuditAction =
   | 'sound.hide'
   | 'sound.restore'
   | 'sound.remove'
+  | 'sound.create'
+  | 'sound.update'
+  | 'sound.publish'
+  | 'sound.unpublish'
+  | 'category.create'
+  | 'category.update'
+  | 'category.activate'
+  | 'category.deactivate'
   | 'live.end'
   | 'live.chat.delete'
   | 'notification.send'
@@ -38,7 +46,7 @@ interface AdminAuditLogInput {
   actorUid: string;
   actorEmail: string | null;
   action: AdminAuditAction;
-  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification' | 'vendor' | 'listing' | 'comment' | 'report' | 'admin' | 'settings';
+  targetType: 'user' | 'content' | 'sound' | 'live' | 'notification' | 'vendor' | 'listing' | 'comment' | 'report' | 'admin' | 'settings' | 'category';
   targetId: string;
   reason: string | null;
   /** Module 08: lets a notification "campaign" carry its own rich record (title/body/audience/recipientCount) without a second collection — adminAuditLogs is already the source of truth for "who did what, when." */
