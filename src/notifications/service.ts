@@ -21,7 +21,11 @@ export type NotificationType =
   | 'sound_removed'
   | 'user_suspended'
   | 'user_warned'
-  | 'live_ended_by_admin';
+  | 'live_ended_by_admin'
+  | 'admin_access_granted'
+  | 'admin_role_changed'
+  | 'admin_suspended'
+  | 'admin_reactivated';
 
 export interface NotificationActor {
   username?: string;
@@ -47,7 +51,7 @@ interface CreateNotificationInput {
   campaignId?: string;
   /** Skips the live users/{actorId} lookup and uses this directly — announcement/vendor_approved/vendor_rejected/listing_suspended's actorId ('system') has no real user doc to denormalize from. */
   actorOverride?: NotificationActor;
-  /** vendor_rejected/listing_suspended/content_hidden/content_removed/comment_hidden/sound_hidden/sound_removed/user_suspended/user_warned/live_ended_by_admin types — the admin's stated reason. */
+  /** vendor_rejected/listing_suspended/content_hidden/content_removed/comment_hidden/sound_hidden/sound_removed/user_suspended/user_warned/live_ended_by_admin/admin_role_changed/admin_suspended types — the admin's stated reason (admin_role_changed carries the before/after role as short text here, not a new structured field). */
   reason?: string;
   /** listing_suspended type only. */
   listingId?: string;
@@ -121,6 +125,10 @@ export async function createNotification({
     'user_suspended',
     'user_warned',
     'live_ended_by_admin',
+    'admin_access_granted',
+    'admin_role_changed',
+    'admin_suspended',
+    'admin_reactivated',
   ];
   if (recipientId === actorId && !SYSTEM_TYPES.includes(type)) return;
 
@@ -168,7 +176,12 @@ export async function createNotification({
                     ? commentId
                     : type === 'sound_hidden' || type === 'sound_removed'
                       ? soundId
-                      : type === 'user_suspended' || type === 'user_warned'
+                      : type === 'user_suspended' ||
+                          type === 'user_warned' ||
+                          type === 'admin_access_granted' ||
+                          type === 'admin_role_changed' ||
+                          type === 'admin_suspended' ||
+                          type === 'admin_reactivated'
                         ? 'account'
                         : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);
