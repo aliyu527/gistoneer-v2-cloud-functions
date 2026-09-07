@@ -8,7 +8,7 @@ interface GetMyPostInteractionsRequest {
 }
 
 export const getMyPostInteractions = onCall<GetMyPostInteractionsRequest, Promise<Record<string, PostInteractionState>>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');

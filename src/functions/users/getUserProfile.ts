@@ -26,7 +26,7 @@ export interface PublicUserProfile {
  * specifically because it's a scan-style query).
  */
 export const getUserProfile = onCall<GetUserProfileRequest, Promise<PublicUserProfile>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');

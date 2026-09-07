@@ -30,7 +30,7 @@ interface CreateMediaUploadUrlResponse {
  * hands back only what's needed to perform the upload.
  */
 export const createMediaUploadUrl = onCall<CreateMediaUploadUrlRequest, Promise<CreateMediaUploadUrlResponse>>(
-  {cors: true, secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY], region: 'us-central1'},
+  {cors: true, secrets: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY], region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');

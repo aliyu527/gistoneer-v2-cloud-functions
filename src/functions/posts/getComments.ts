@@ -7,7 +7,7 @@ interface GetCommentsRequest {
   limit?: number;
 }
 
-export const getComments = onCall<GetCommentsRequest, Promise<PostComment[]>>({cors: true, region: 'us-central1'}, async (request) => {
+export const getComments = onCall<GetCommentsRequest, Promise<PostComment[]>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Please sign in and try again.');
   }

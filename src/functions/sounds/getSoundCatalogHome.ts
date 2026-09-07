@@ -11,7 +11,7 @@ interface CatalogHomeResponse {
 
 /** One combined call for the Sound Library's home screen — avoids 4 separate round trips. */
 export const getSoundCatalogHome = onCall<unknown, Promise<CatalogHomeResponse>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Please sign in and try again.');
