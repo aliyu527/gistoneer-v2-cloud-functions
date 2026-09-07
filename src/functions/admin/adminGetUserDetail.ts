@@ -13,6 +13,8 @@ export interface AdminUserDetail extends AdminUserListItem {
   updatedAt: string | null;
   contentCounts: {posts: number; sounds: number; playlists: number};
   lastSuspension: {reason: string | null; at: string | null; byEmail: string | null} | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
 }
 
 interface AdminGetUserDetailRequest {
@@ -70,6 +72,7 @@ export const adminGetUserDetail = onCall<AdminGetUserDetailRequest, Promise<Admi
     status,
     emailVerified: Boolean(data.emailVerified),
     phoneVerified: Boolean(data.phoneVerified),
+    isVerified: Boolean(data.isVerified),
     followerCount: typeof data.followerCount === 'number' ? data.followerCount : 0,
     followingCount: typeof data.followingCount === 'number' ? data.followingCount : 0,
     createdAt: data.createdAt?.toDate?.().toISOString() ?? null,
@@ -86,5 +89,7 @@ export const adminGetUserDetail = onCall<AdminGetUserDetailRequest, Promise<Admi
       playlists: playlistsSnap.data().count,
     },
     lastSuspension,
+    verifiedAt: data.verifiedAt?.toDate?.().toISOString() ?? null,
+    verifiedBy: (data.verifiedBy as string) ?? null,
   };
 });

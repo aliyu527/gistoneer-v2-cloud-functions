@@ -14,6 +14,7 @@ export interface AdminUserListItem {
   status: 'active' | 'suspended';
   emailVerified: boolean;
   phoneVerified: boolean;
+  isVerified: boolean;
   followerCount: number;
   followingCount: number;
   createdAt: string | null;
@@ -22,6 +23,7 @@ export interface AdminUserListItem {
 interface AdminListUsersRequest {
   status?: 'active' | 'suspended';
   verified?: boolean;
+  isVerified?: boolean;
   sortDir?: 'asc' | 'desc';
   pageSize?: number;
   cursor?: string;
@@ -47,6 +49,7 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
     status: (data.status as AdminUserListItem['status']) ?? 'active',
     emailVerified: Boolean(data.emailVerified),
     phoneVerified: Boolean(data.phoneVerified),
+    isVerified: Boolean(data.isVerified),
     followerCount: typeof data.followerCount === 'number' ? data.followerCount : 0,
     followingCount: typeof data.followingCount === 'number' ? data.followingCount : 0,
     createdAt: createdAt?.toDate?.().toISOString() ?? null,
@@ -63,20 +66,29 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
  * via serverTimestamp() for every user at signup, so it can never do that.
  * `status`/`verified` filters need composite indexes (see
  * firestore.indexes.json); the unfiltered case needs none (single-field,
- * auto-indexed).
+ * auto-indexed). `isVerified` (the platform verification flag, unrelated to
+ * `verified`/emailVerified) is deliberately mutually exclusive with
+ * `status`/`verified` here rather than combinable with them — combining
+ * would need a 3-field composite index; keeping it a standalone alternative
+ * needs only one more 2-field index, the same discipline used by every
+ * other filtered list function since Module 14's audit log viewer.
  */
 export const adminListUsers = onCall<AdminListUsersRequest, Promise<AdminListUsersResponse>>({cors: true, region: 'us-central1'}, async (request) => {
   await requireActiveAdmin(request, 'users.read');
 
-  const {status, verified, sortDir = 'desc', cursor} = request.data ?? {};
+  const {status, verified, isVerified, sortDir = 'desc', cursor} = request.data ?? {};
   const pageSize = clampLimit(request.data?.pageSize, 50, 20);
 
   let q: Query<DocumentData> = db.collection('users');
-  if (status) {
-    q = q.where('status', '==', status);
-  }
-  if (verified === true) {
-    q = q.where('emailVerified', '==', true);
+  if (isVerified !== undefined) {
+    q = q.where('isVerified', '==', isVerified);
+  } else {
+    if (status) {
+      q = q.where('status', '==', status);
+    }
+    if (verified === true) {
+      q = q.where('emailVerified', '==', true);
+    }
   }
   q = q.orderBy('createdAt', sortDir).orderBy('__name__', sortDir).limit(pageSize);
 

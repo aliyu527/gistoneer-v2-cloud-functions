@@ -11,6 +11,7 @@ export interface PublicUserProfile {
   username: string | null;
   displayName: string | null;
   photoURL: string | null;
+  isVerified: boolean;
   followerCount: number;
   followingCount: number;
   isFollowing: boolean;
@@ -48,6 +49,7 @@ export const getUserProfile = onCall<GetUserProfileRequest, Promise<PublicUserPr
       username: (data.username as string) ?? null,
       displayName: (data.displayName as string) ?? null,
       photoURL: (data.photoURL as string) ?? null,
+      isVerified: Boolean(data.isVerified),
       followerCount: (data.followerCount as number) ?? 0,
       followingCount: (data.followingCount as number) ?? 0,
       isFollowing: following,

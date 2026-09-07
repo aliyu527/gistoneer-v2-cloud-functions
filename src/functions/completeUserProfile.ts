@@ -4,9 +4,9 @@ import {normalizeUsername} from '../lib/normalize';
 import {getPlatformSettings} from '../lib/platformSettings';
 import type {CompleteUserProfileRequest} from '../lib/types';
 
-const MIN_AGE_YEARS = 13;
+export const MIN_AGE_YEARS = 13;
 
-function isValidBirthday(iso: string): boolean {
+export function isValidBirthday(iso: string): boolean {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return false;
   if (date.getTime() > Date.now()) return false; // no future birthdays

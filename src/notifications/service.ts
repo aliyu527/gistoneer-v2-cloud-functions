@@ -25,7 +25,9 @@ export type NotificationType =
   | 'admin_access_granted'
   | 'admin_role_changed'
   | 'admin_suspended'
-  | 'admin_reactivated';
+  | 'admin_reactivated'
+  | 'user_verified'
+  | 'user_unverified';
 
 export interface NotificationActor {
   username?: string;
@@ -129,6 +131,8 @@ export async function createNotification({
     'admin_role_changed',
     'admin_suspended',
     'admin_reactivated',
+    'user_verified',
+    'user_unverified',
   ];
   if (recipientId === actorId && !SYSTEM_TYPES.includes(type)) return;
 
@@ -181,7 +185,9 @@ export async function createNotification({
                           type === 'admin_access_granted' ||
                           type === 'admin_role_changed' ||
                           type === 'admin_suspended' ||
-                          type === 'admin_reactivated'
+                          type === 'admin_reactivated' ||
+                          type === 'user_verified' ||
+                          type === 'user_unverified'
                         ? 'account'
                         : postId;
   const ref = db.collection('notifications').doc(`${recipientId}_${type}_${idSuffix}`);

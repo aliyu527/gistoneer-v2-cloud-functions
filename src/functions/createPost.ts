@@ -407,10 +407,15 @@ export const createPost = onCall<CreatePostRequest, Promise<CreatePostResponse>>
 
     const userSnap = await db.collection('users').doc(uid).get();
     const userData = userSnap.data() ?? {};
-    const author: Record<string, string> = {userId: uid};
+    const author: Record<string, string | boolean> = {userId: uid};
     if (userData.username) author.username = userData.username;
     if (userData.displayName) author.displayName = userData.displayName;
     if (userData.photoURL) author.avatarUrl = userData.photoURL;
+    // Denormalized like the fields above — reflects verification status at
+    // post-creation time only; doesn't retroactively update on existing
+    // posts if the author is verified/unverified later (same limitation as
+    // username/displayName/avatarUrl already have).
+    if (userData.isVerified) author.isVerified = true;
 
     const ref = clientPostId ? db.collection('posts').doc(clientPostId) : db.collection('posts').doc();
     await ref.set({

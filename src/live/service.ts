@@ -42,6 +42,9 @@ export async function createLiveSession(hostId: string, {title, visibility, sour
     hostId,
     hostName,
     ...(host.photoURL ? {hostAvatarUrl: host.photoURL} : {}),
+    // Denormalized like hostName/hostAvatarUrl above — reflects verification
+    // status at session-start time only, same disclosed limitation.
+    ...(host.isVerified ? {hostIsVerified: true} : {}),
     // Title is optional to the caller (spec: "do not make mandatory") — a
     // sensible fallback using the host's own name, not an empty string.
     title: title || `${hostName}'s Live`,

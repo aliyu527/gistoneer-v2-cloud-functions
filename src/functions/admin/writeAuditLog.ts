@@ -5,6 +5,9 @@ import {db} from '../../admin';
 export type AdminAuditAction =
   | 'user.suspend'
   | 'user.unsuspend'
+  | 'user.create'
+  | 'user.verify'
+  | 'user.unverify'
   | 'content.hide'
   | 'content.restore'
   | 'content.remove'

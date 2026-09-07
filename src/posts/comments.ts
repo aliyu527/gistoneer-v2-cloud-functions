@@ -13,6 +13,7 @@ export interface PostCommentAuthor {
   username?: string;
   displayName?: string;
   avatarUrl?: string;
+  isVerified?: boolean;
 }
 
 export interface PostComment {
@@ -32,6 +33,7 @@ function buildAuthor(userData: FirebaseFirestore.DocumentData): PostCommentAutho
   if (userData.username) author.username = userData.username;
   if (userData.displayName) author.displayName = userData.displayName;
   if (userData.photoURL) author.avatarUrl = userData.photoURL;
+  if (userData.isVerified) author.isVerified = true;
   return author;
 }
 

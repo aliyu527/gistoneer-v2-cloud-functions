@@ -13,6 +13,7 @@ interface PublicUser {
   username: string | null;
   displayName: string | null;
   photoURL: string | null;
+  isVerified: boolean;
 }
 
 // Same charset as normalizeUsername (lib/normalize.ts) but without requiring
@@ -76,6 +77,7 @@ export const searchUsers = onCall<SearchUsersRequest, Promise<PublicUser[]>>({co
         username: (data.username as string) ?? null,
         displayName: (data.displayName as string) ?? null,
         photoURL: (data.photoURL as string) ?? null,
+        isVerified: Boolean(data.isVerified),
       };
     });
 });

@@ -10,6 +10,8 @@ export type Permission =
   | 'users.read'
   | 'users.write'
   | 'users.suspend'
+  | 'users.create'
+  | 'users.verify'
   | 'content.read'
   | 'content.moderate'
   | 'content.delete'
@@ -36,6 +38,8 @@ const ALL_PERMISSIONS: Permission[] = [
   'users.read',
   'users.write',
   'users.suspend',
+  'users.create',
+  'users.verify',
   'content.read',
   'content.moderate',
   'content.delete',

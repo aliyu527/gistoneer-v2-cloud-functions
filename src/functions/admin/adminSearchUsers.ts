@@ -37,6 +37,7 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
     status: (data.status as AdminUserListItem['status']) ?? 'active',
     emailVerified: Boolean(data.emailVerified),
     phoneVerified: Boolean(data.phoneVerified),
+    isVerified: Boolean(data.isVerified),
     followerCount: typeof data.followerCount === 'number' ? data.followerCount : 0,
     followingCount: typeof data.followingCount === 'number' ? data.followingCount : 0,
     createdAt: data.createdAt?.toDate?.().toISOString() ?? null,

@@ -31,6 +31,7 @@ export interface ListingDetail {
     logoUrl: string | null;
     contactEmail: string | null;
     contactPhone: string | null;
+    isVerified: boolean;
   } | null;
 }
 
@@ -61,8 +62,16 @@ export const getListingDetail = onCall<GetListingDetailRequest, Promise<ListingD
     throw new HttpsError('not-found', 'This listing could not be found.');
   }
 
-  const vendorSnap = await db.collection('vendors').doc(data.vendorId as string).get();
+  const [vendorSnap, vendorUserSnap] = await Promise.all([
+    db.collection('vendors').doc(data.vendorId as string).get(),
+    db.collection('users').doc(data.vendorId as string).get(),
+  ]);
   const vendorData = vendorSnap.data();
+  // The canonical platform verification flag lives on users/{uid}, not
+  // vendors/{uid} — a live per-request join, not a second verification
+  // concept and not a client-side N+1 (one extra read per listing-detail
+  // call, not per-post-in-a-list).
+  const vendorIsVerified = Boolean(vendorUserSnap.data()?.isVerified);
 
   const media = Array.isArray(data.media) ? (data.media as Record<string, unknown>[]) : [];
 
@@ -95,6 +104,7 @@ export const getListingDetail = onCall<GetListingDetailRequest, Promise<ListingD
           logoUrl: (vendorData?.logoUrl as string) ?? null,
           contactEmail: (vendorData?.contactEmail as string) ?? null,
           contactPhone: (vendorData?.contactPhone as string) ?? null,
+          isVerified: vendorIsVerified,
         }
       : null,
   };
