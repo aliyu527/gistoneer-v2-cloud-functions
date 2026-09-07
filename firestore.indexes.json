@@ -308,6 +308,19 @@
       ]
     },
     {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "audience", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "ASCENDING"},
+        {"fieldPath": "counts.bookmarks", "order": "ASCENDING"},
+        {"fieldPath": "counts.comments", "order": "ASCENDING"},
+        {"fieldPath": "counts.likes", "order": "ASCENDING"},
+        {"fieldPath": "counts.shares", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "liveSessions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -345,6 +358,15 @@
       "fields": [
         {"fieldPath": "actorEmail", "order": "ASCENDING"},
         {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "adminAuditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "action", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "ASCENDING"},
+        {"fieldPath": "metadata.recipientCount", "order": "ASCENDING"}
       ]
     },
     {
