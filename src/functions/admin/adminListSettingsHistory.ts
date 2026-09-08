@@ -22,7 +22,7 @@ interface AdminListSettingsHistoryResponse {
 }
 
 /** Reuses adminAuditLogs directly (Decision 6) — mirrors adminListModerationHistory.ts exactly, off the same existing (action, createdAt) composite index. Every settings.update entry's `reason` is already a human-readable "Field: before → after" string (written by updatePlatformSettings.ts), so there's no separate before/after field to project here. */
-export const adminListSettingsHistory = onCall<AdminListSettingsHistoryRequest, Promise<AdminListSettingsHistoryResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListSettingsHistory = onCall<AdminListSettingsHistoryRequest, Promise<AdminListSettingsHistoryResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'settings.read');
 
   const {sortDir = 'desc', cursor} = request.data ?? {};

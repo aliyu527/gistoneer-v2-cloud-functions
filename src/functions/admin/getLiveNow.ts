@@ -23,7 +23,7 @@ interface LiveNowResponse {
  * to see private broadcasts too (spec's own explicit live-privacy carve-out),
  * unlike the mobile app's own public-only live feed query.
  */
-export const getLiveNow = onCall<undefined, Promise<LiveNowResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const getLiveNow = onCall<undefined, Promise<LiveNowResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdminAny(request);
 
   const [listSnap, countSnap] = await Promise.all([

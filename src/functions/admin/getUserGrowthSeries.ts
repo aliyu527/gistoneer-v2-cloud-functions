@@ -18,7 +18,7 @@ interface UserGrowthResponse {
  * client-side — the codebase's established "no full-collection reads" rule
  * applies just as much to a chart as to a single number.
  */
-export const getUserGrowthSeries = onCall<DashboardRangeInput, Promise<UserGrowthResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const getUserGrowthSeries = onCall<DashboardRangeInput, Promise<UserGrowthResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdminAny(request);
 
   const {start, end} = resolveRange(request.data ?? {});

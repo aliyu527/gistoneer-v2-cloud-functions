@@ -31,7 +31,7 @@ interface AdminListNotificationCampaignsResponse {
  * support.
  */
 export const adminListNotificationCampaigns = onCall<AdminListNotificationCampaignsRequest, Promise<AdminListNotificationCampaignsResponse>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     await requireActiveAdmin(request, 'notifications.read');
 

@@ -124,11 +124,14 @@ service cloud.firestore {
       // audience/moderationStatus narrowing below — adminListContent needs
       // to see every audience and moderation state for moderation purposes,
       // matching what the Admin-SDK-backed callable already sees today.
+      // analytics.read branch (getEngagementSummary/Trend, getContentAnalytics)
+      // needs the same bypass — those functions count hidden/removed posts.
       allow read: if request.auth != null
         && (resource.data.authorId == request.auth.uid
             || (resource.data.audience == 'public'
                 && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
-            || hasPermission('content.read'));
+            || hasPermission('content.read')
+            || hasPermission('analytics.read'));
       allow write: if false;
 
       // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely
@@ -203,11 +206,14 @@ service cloud.firestore {
     match /sounds/{soundId} {
       // Admin branch (sounds.read) bypasses visibility/moderationStatus for
       // the same moderation-visibility reason as posts/{postId} above.
+      // analytics.read branch (getMusicAnalytics) needs the same bypass to
+      // count non-public sounds.
       allow read: if request.auth != null
         && (resource.data.ownerId == request.auth.uid
             || (resource.data.visibility == 'public'
                 && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
-            || hasPermission('sounds.read'));
+            || hasPermission('sounds.read')
+            || hasPermission('analytics.read'));
       allow write: if false;
     }
 
@@ -239,8 +245,10 @@ service cloud.firestore {
     match /playlists/{playlistId} {
       // Admin branch (sounds.read — adminListPlaylists checks this same
       // permission server-side today) bypasses visibility for moderation.
+      // analytics.read branch (getMusicAnalytics) needs the same bypass to
+      // count private playlists.
       allow read: if request.auth != null
-        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid || hasPermission('sounds.read'));
+        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid || hasPermission('sounds.read') || hasPermission('analytics.read'));
       allow write: if false;
     }
 
@@ -287,13 +295,32 @@ service cloud.firestore {
     // signed-in user, 'private' ones owner-only (private access beyond that
     // is not implemented yet — a disclosed scope decision, not an oversight).
     match /liveSessions/{liveId} {
-      // Admin branch (live.read — adminListLiveSessions checks this same
-      // permission server-side today) bypasses visibility for moderation.
-      allow read: if request.auth != null
+      // Split get/list (Cloud Run cost-reduction migration debugging):
+      // Firestore's list-query safety analyzer must PROVE every possible
+      // result satisfies the rule without per-document data. The exists()
+      // clause below references $(liveId) — a path that varies per
+      // candidate document — which the analyzer can't reason about across
+      // an unconstrained query, so it rejects the ENTIRE list request
+      // outright (not just filters out non-matching docs), regardless of
+      // what the actual data looks like. Mobile's own live-browse query
+      // (Services/Live/liveService.ts) always pre-filters
+      // where('visibility','==','public') explicitly, which is what let it
+      // avoid ever triggering this — admin's moderation view is
+      // deliberately unfiltered (needs to see private sessions too), making
+      // it the first real caller to hit this latent issue. `list` drops the
+      // exists() clause entirely (mobile's list query never needs it — it
+      // never lists private lives, only public ones); `get` (opening one
+      // specific known live by ID, e.g. an invited viewer following a deep
+      // link) keeps the full condition, preserving that feature exactly.
+      allow get: if request.auth != null
         && (resource.data.visibility == 'public'
             || resource.data.hostId == request.auth.uid
             || (resource.data.visibility == 'private'
                 && exists(/databases/$(database)/documents/liveSessions/$(liveId)/invited/$(request.auth.uid)))
+            || hasPermission('live.read'));
+      allow list: if request.auth != null
+        && (resource.data.visibility == 'public'
+            || resource.data.hostId == request.auth.uid
             || hasPermission('live.read'));
       allow write: if false;
 
@@ -370,11 +397,22 @@ service cloud.firestore {
 
     // adminAuditLogs/{id} — Module 04. Records of admin actions (suspend/
     // unsuspend a user, etc.), written by writeAuditLog() via the Admin SDK.
-    // Server-only like every other admin-adjacent collection here — no
-    // browsing UI reads this directly either; adminGetUserDetail's
-    // lastSuspension field is the only reader, also via the Admin SDK.
+    // adminListAuditLogs/adminGetAuditLogDetail migration: audit.read is the
+    // ONLY permission gated in here — the full raw document is already the
+    // intended read surface for that permission (confirmed by
+    // adminGetAuditLogDetail's own comment: "the collection has no separate
+    // summary/detail split"). adminListModerationHistory/
+    // adminListNotificationCampaigns/adminListSettingsHistory ALSO read this
+    // same shared collection (filtered to different action subsets) but are
+    // gated by reports.read/notifications.read/settings.read — deliberately
+    // NOT added here, since their callables curate a narrower field subset
+    // (no metadata, no actorUid) than this collection's raw documents; a
+    // blanket permission-OR would leak those fields to holders of those
+    // other permissions who were never meant to see them. Those three stay
+    // Cloud Functions.
     match /adminAuditLogs/{id} {
-      allow read, write: if false;
+      allow read: if hasPermission('audit.read');
+      allow write: if false;
     }
 
     // admins/{uid} — Module 04+. The RBAC source of truth (role, status),
@@ -385,13 +423,20 @@ service cloud.firestore {
     // self-documentation reasons, no behavior change (still fully
     // server-only via the Admin SDK).
     match /admins/{uid} {
-      // Self-read only (getMyAdminProfile migration) — role/status changes
-      // stay fully server-only. Note this exception is NOT what makes
+      // Self-read (getMyAdminProfile migration) plus admins.read for the
+      // adminListAdmins migration — role/status changes stay fully
+      // server-only. Note the self-read exception was NEVER what made
       // hasPermission() work elsewhere in this file: a rule's own get() call
       // against this path bypasses this document's own `allow read` entirely,
       // so every hasPermission()/isActiveAdmin() check above already worked
-      // before this line existed.
-      allow read: if request.auth != null && request.auth.uid == uid;
+      // before this line existed. `list` additionally caps request.query.limit
+      // — defense-in-depth since this is the RBAC source-of-truth collection
+      // getting bulk-list access for the first time; no new FIELDS are
+      // exposed vs. today's adminListAdmins callable (same audience, same
+      // shape), but an unbounded client query could otherwise enumerate the
+      // whole admin roster in one call where the callable capped pages at 50.
+      allow get: if (request.auth != null && request.auth.uid == uid) || hasPermission('admins.read');
+      allow list: if hasPermission('admins.read') && request.query.limit <= 50;
       allow write: if false;
     }
 
@@ -421,13 +466,18 @@ service cloud.firestore {
     }
 
     // settings/{docId} — Module 13. Platform-wide feature flags, maintenance
-    // mode, and media size limits (settings/platform). Server-only like every
-    // other admin-adjacent collection here: read via getPlatformSettings()'s
-    // cached Admin SDK read inside every consumer function, written only via
-    // updatePlatformSettings (settings.write permission). No client ever
-    // reads or writes this collection directly.
+    // mode, and media size limits (settings/platform). Every OTHER consumer
+    // (createPost, createLiveSession, etc.) still reads via the cached
+    // Admin-SDK getPlatformSettings() helper server-side, unaffected by this.
+    // getPlatformSettingsAdmin migration: single-doc get, not a list query —
+    // no exists()/get() per-document-wildcard concern applies at all. Scoped
+    // to the one real doc id rather than a blanket allow, since nothing else
+    // is ever expected to live in this collection. Written only via
+    // updatePlatformSettings (settings.write permission) — still server-only.
     match /settings/{docId} {
-      allow read, write: if false;
+      allow get: if docId == 'platform' && hasPermission('settings.read');
+      allow list: if false;
+      allow write: if false;
     }
 
     // vendors/{uid} — Marketplace vendor application + shop profile, one
@@ -460,9 +510,14 @@ service cloud.firestore {
     // rules above — every field here is new, and today's outage already
     // proved what a bare dot-access on a possibly-missing field does.
     match /listings/{listingId} {
+      // Admin branch (marketplace.read — adminListListings checks this same
+      // permission server-side today) bypasses status/vendorStatus: an admin
+      // reviewing a suspended vendor's listings, or a still-draft listing,
+      // needs full visibility, matching the Admin-SDK-backed callable today.
       allow read: if request.auth != null
         && (resource.data.vendorId == request.auth.uid
-            || (resource.data.status == 'published' && resource.data.get('vendorStatus', 'approved') == 'approved'));
+            || (resource.data.status == 'published' && resource.data.get('vendorStatus', 'approved') == 'approved')
+            || hasPermission('marketplace.read'));
       allow write: if false;
     }
 

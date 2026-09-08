@@ -60,7 +60,7 @@ interface AdminListModerationHistoryResponse {
  * no new index needed for either the default or the narrowed view.
  */
 export const adminListModerationHistory = onCall<AdminListModerationHistoryRequest, Promise<AdminListModerationHistoryResponse>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     await requireActiveAdmin(request, 'reports.read');
 

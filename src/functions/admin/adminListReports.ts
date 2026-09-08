@@ -47,7 +47,7 @@ export function toReportListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): 
 }
 
 /** Defaults to the pending queue when no status filter is given — `/reports/list` in the admin is both "the queue" and the general reports table (Decision 8: no separate Moderation Queue page). Filters applied one at a time (status > targetType), matching the established index discipline (adminListListings/adminListVendors). */
-export const adminListReports = onCall<AdminListReportsRequest, Promise<AdminListReportsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListReports = onCall<AdminListReportsRequest, Promise<AdminListReportsResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'reports.read');
 
   const {status, targetType, sortDir = 'desc', cursor} = request.data ?? {};

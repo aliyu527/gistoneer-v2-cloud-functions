@@ -21,7 +21,7 @@ interface OverviewResponse {
  * download (confirmed against current Firebase docs before using this;
  * nothing in this codebase used aggregation queries before this module).
  */
-export const getDashboardOverview = onCall<DashboardRangeInput, Promise<OverviewResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const getDashboardOverview = onCall<DashboardRangeInput, Promise<OverviewResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdminAny(request);
 
   const {start, end, previousStart, previousEnd} = resolveRange(request.data ?? {});
