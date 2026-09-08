@@ -11,7 +11,7 @@ interface ReportsOverviewResponse {
 }
 
 /** Every count is a Firestore count() aggregation query (mirrors adminGetMarketplaceOverview.ts) — never a full collection download. */
-export const adminGetReportsOverview = onCall<undefined, Promise<ReportsOverviewResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminGetReportsOverview = onCall<undefined, Promise<ReportsOverviewResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'reports.read');
 
   const [pendingSnap, resolvedSnap, dismissedSnap, recentPendingSnap] = await Promise.all([

@@ -37,7 +37,7 @@ interface MarketplaceOverviewResponse {
  * listings(status,createdAt) composite indexes already deployed for the
  * list pages, so no new index was needed for this dashboard.
  */
-export const adminGetMarketplaceOverview = onCall<undefined, Promise<MarketplaceOverviewResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminGetMarketplaceOverview = onCall<undefined, Promise<MarketplaceOverviewResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'marketplace.read');
 
   const [

@@ -20,7 +20,7 @@ interface AdminListSoundCategoriesResponse {
 }
 
 /** No pagination — categories are a small, admin-curated set (unlike sounds/users), same "load them all, sort client-side" posture as the existing permission list this session already established for small reference sets. */
-export const adminListSoundCategories = onCall<undefined, Promise<AdminListSoundCategoriesResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListSoundCategories = onCall<undefined, Promise<AdminListSoundCategoriesResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'sounds.read');
 
   const snap = await db.collection('soundCategories').orderBy('sortOrder', 'asc').get();

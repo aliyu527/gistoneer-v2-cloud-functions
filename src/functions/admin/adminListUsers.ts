@@ -73,7 +73,7 @@ function toListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminUserList
  * needs only one more 2-field index, the same discipline used by every
  * other filtered list function since Module 14's audit log viewer.
  */
-export const adminListUsers = onCall<AdminListUsersRequest, Promise<AdminListUsersResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListUsers = onCall<AdminListUsersRequest, Promise<AdminListUsersResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'users.read');
 
   const {status, verified, isVerified, sortDir = 'desc', cursor} = request.data ?? {};

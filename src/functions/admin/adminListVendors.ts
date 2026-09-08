@@ -44,7 +44,7 @@ export function toVendorListItem(doc: FirebaseFirestore.QueryDocumentSnapshot): 
 }
 
 /** One list serves both the "Vendor Applications" queue (status=='pending') and the general "Vendors" view (approved/suspended/rejected) — vendors is a single collection per Decision 1, not split into applications+shops. */
-export const adminListVendors = onCall<AdminListVendorsRequest, Promise<AdminListVendorsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListVendors = onCall<AdminListVendorsRequest, Promise<AdminListVendorsResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'marketplace.read');
 
   const {status, sortDir = 'desc', cursor} = request.data ?? {};

@@ -109,7 +109,7 @@ function toSoundListItem(doc: FirebaseFirestore.QueryDocumentSnapshot, creators:
  * firestore.indexes.json); alphabetical (`title`) sort is only offered when
  * `creatorId` is set, matching the existing `(ownerId, title)` index.
  */
-export const adminListSounds = onCall<AdminListSoundsRequest, Promise<AdminListSoundsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListSounds = onCall<AdminListSoundsRequest, Promise<AdminListSoundsResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'sounds.read');
 
   const {moderationStatus, visibility, creatorId, categoryId, sortBy = 'createdAt', sortDir = 'desc', cursor} = request.data ?? {};

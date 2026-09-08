@@ -65,7 +65,7 @@ export function toLiveSessionListItem(doc: FirebaseFirestore.QueryDocumentSnapsh
  * honored when `status` is also set, matching the existing
  * `(status, viewerCount desc)` index used by getLiveNow.ts.
  */
-export const adminListLiveSessions = onCall<AdminListLiveSessionsRequest, Promise<AdminListLiveSessionsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListLiveSessions = onCall<AdminListLiveSessionsRequest, Promise<AdminListLiveSessionsResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'live.read');
 
   const {status, recordingStatus, hostId, sortBy = 'createdAt', sortDir = 'desc', cursor} = request.data ?? {};

@@ -78,7 +78,7 @@ function toPlaylistListItem(doc: FirebaseFirestore.QueryDocumentSnapshot, creato
  * Sorted by `updatedAt` (not `createdAt`) to match the existing
  * (ownerId,updatedAt) / (visibility,updatedAt) indexes exactly.
  */
-export const adminListPlaylists = onCall<AdminListPlaylistsRequest, Promise<AdminListPlaylistsResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListPlaylists = onCall<AdminListPlaylistsRequest, Promise<AdminListPlaylistsResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'sounds.read');
 
   const {visibility, creatorId, sortDir = 'desc', cursor} = request.data ?? {};

@@ -15,6 +15,7 @@
     "deploy:functions": "firebase deploy --only functions --account gistoneer@gmail.com",
     "deploy:firestore": "firebase deploy --only firestore:rules --account gistoneer@gmail.com",
     "logs": "firebase functions:log",
+    "secrets:list": "firebase functions:secrets:list",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

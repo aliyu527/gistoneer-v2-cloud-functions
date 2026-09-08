@@ -35,7 +35,7 @@ interface GetAdminNotificationsResponse {
 
 /** Any active admin reads only their OWN inbox — no permission beyond being an active admin (matches /dashboard's own no-extra-permission precedent). isRead/category filters are mutually exclusive by design, same index-minimizing discipline as adminListAuditLogs.ts. */
 export const getAdminNotifications = onCall<GetAdminNotificationsRequest, Promise<GetAdminNotificationsResponse>>(
-  {cors: true, region: 'us-central1'},
+  {cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10},
   async (request) => {
     const admin = await requireActiveAdminAny(request);
 

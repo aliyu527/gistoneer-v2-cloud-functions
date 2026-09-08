@@ -84,7 +84,7 @@ export function toContentListItem(doc: FirebaseFirestore.QueryDocumentSnapshot):
  * `author`/`counts` are already denormalized onto every post, so this needs
  * zero N+1 creator lookups.
  */
-export const adminListContent = onCall<AdminListContentRequest, Promise<AdminListContentResponse>>({cors: true, region: 'us-central1'}, async (request) => {
+export const adminListContent = onCall<AdminListContentRequest, Promise<AdminListContentResponse>>({cors: true, region: 'us-central1', minInstances: 1, maxInstances: 10}, async (request) => {
   await requireActiveAdmin(request, 'content.read');
 
   const {moderationStatus, audience, creatorId, sortBy = 'createdAt', sortDir = 'desc', cursor} = request.data ?? {};
