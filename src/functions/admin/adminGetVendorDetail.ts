@@ -1,7 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
-import type {AdminVendorListItem} from './adminListVendors';
+import type {AdminVendorListItem} from './adminVendorShared';
 
 export interface AdminVendorDetail extends AdminVendorListItem {
   description: string;

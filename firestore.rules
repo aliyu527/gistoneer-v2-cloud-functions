@@ -3,6 +3,38 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Admin-aware rule primitives (Cloud Run cost-reduction migration) ---
+    // Mirror functions/src/functions/admin/requireActiveAdmin.ts and
+    // permissions.ts EXACTLY — same trust model (fresh admins/{uid} read on
+    // every evaluation, role never trusted from the custom claim beyond the
+    // coarse boolean pre-filter), same static 4-role -> permission table.
+    // A rule's own get()/exists() call against admins/{uid} is NOT subject to
+    // that document's own `allow read` rule below, so admins/{uid} can stay
+    // closed to direct client reads (except the self-read exception) while
+    // still being usable here to authorize every other collection.
+    function activeAdminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isActiveAdmin() {
+      return request.auth != null
+        && request.auth.token.admin == true
+        && activeAdminDoc().data.status == 'active';
+    }
+    function adminRole() {
+      return activeAdminDoc().data.role;
+    }
+    // Verbatim mirror of ROLE_PERMISSIONS in functions/src/functions/admin/permissions.ts.
+    function hasPermission(permission) {
+      return isActiveAdmin() && (
+        adminRole() == 'super_admin' ||
+        (adminRole() == 'admin' && permission != 'admins.manage') ||
+        (adminRole() == 'moderator' && permission in
+          ['content.read', 'content.moderate', 'content.delete', 'sounds.read', 'sounds.moderate',
+           'live.read', 'live.moderate', 'live.end', 'reports.read', 'reports.resolve']) ||
+        (adminRole() == 'support' && permission in ['users.read', 'reports.read'])
+      );
+    }
+
     // users/{uid} — the app's profile document.
     // Server-controlled fields (uid, phoneVerified, emailVerified, authProviders,
     // username, usernameLower, onboardingCompleted, createdAt) are only ever
@@ -10,7 +42,11 @@ service cloud.firestore {
     // entirely. Client writes here are limited to a narrow, non-sensitive
     // allowlist so a signed-in user can update their own display info.
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      // Admin branch added for the adminListUsers/adminGetUserDetail direct-
+      // read migration — no new exposure: the callable already returns
+      // email/phone to the same set of admins (users.read holders), this
+      // only moves which layer enforces that existing boundary.
+      allow read: if (request.auth != null && request.auth.uid == uid) || hasPermission('users.read');
 
       allow create: if false; // profile creation happens server-side (completeUserProfile)
 
@@ -84,10 +120,15 @@ service cloud.firestore {
     // with an explicit default, matching the same 'active' default the
     // Cloud Functions themselves already use when reading this field.
     match /posts/{postId} {
+      // Admin branch (content.read) intentionally bypasses the
+      // audience/moderationStatus narrowing below — adminListContent needs
+      // to see every audience and moderation state for moderation purposes,
+      // matching what the Admin-SDK-backed callable already sees today.
       allow read: if request.auth != null
         && (resource.data.authorId == request.auth.uid
             || (resource.data.audience == 'public'
-                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])));
+                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
+            || hasPermission('content.read'));
       allow write: if false;
 
       // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely
@@ -160,10 +201,13 @@ service cloud.firestore {
     // read. The identical mistake in the posts rule above broke the entire
     // home feed for several hours after the Module 05 deploy.
     match /sounds/{soundId} {
+      // Admin branch (sounds.read) bypasses visibility/moderationStatus for
+      // the same moderation-visibility reason as posts/{postId} above.
       allow read: if request.auth != null
         && (resource.data.ownerId == request.auth.uid
             || (resource.data.visibility == 'public'
-                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])));
+                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
+            || hasPermission('sounds.read'));
       allow write: if false;
     }
 
@@ -193,8 +237,10 @@ service cloud.firestore {
     // 'public' playlists are readable by any signed-in user, 'private' ones
     // are owner-only.
     match /playlists/{playlistId} {
+      // Admin branch (sounds.read — adminListPlaylists checks this same
+      // permission server-side today) bypasses visibility for moderation.
       allow read: if request.auth != null
-        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid);
+        && (resource.data.visibility == 'public' || resource.data.ownerId == request.auth.uid || hasPermission('sounds.read'));
       allow write: if false;
     }
 
@@ -241,11 +287,14 @@ service cloud.firestore {
     // signed-in user, 'private' ones owner-only (private access beyond that
     // is not implemented yet — a disclosed scope decision, not an oversight).
     match /liveSessions/{liveId} {
+      // Admin branch (live.read — adminListLiveSessions checks this same
+      // permission server-side today) bypasses visibility for moderation.
       allow read: if request.auth != null
         && (resource.data.visibility == 'public'
             || resource.data.hostId == request.auth.uid
             || (resource.data.visibility == 'private'
-                && exists(/databases/$(database)/documents/liveSessions/$(liveId)/invited/$(request.auth.uid))));
+                && exists(/databases/$(database)/documents/liveSessions/$(liveId)/invited/$(request.auth.uid)))
+            || hasPermission('live.read'));
       allow write: if false;
 
       // liveSessions/{liveId}/invited/{uid} — a private live's invite list
@@ -336,7 +385,14 @@ service cloud.firestore {
     // self-documentation reasons, no behavior change (still fully
     // server-only via the Admin SDK).
     match /admins/{uid} {
-      allow read, write: if false;
+      // Self-read only (getMyAdminProfile migration) — role/status changes
+      // stay fully server-only. Note this exception is NOT what makes
+      // hasPermission() work elsewhere in this file: a rule's own get() call
+      // against this path bypasses this document's own `allow read` entirely,
+      // so every hasPermission()/isActiveAdmin() check above already worked
+      // before this line existed.
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // adminNotifications/{id} — Admin Notification System. Each doc targets
@@ -350,7 +406,18 @@ service cloud.firestore {
     // a callable that independently verifies recipientId == request.auth.uid,
     // since these rules give the client no access to lean on at all.
     match /adminNotifications/{id} {
-      allow read, write: if false;
+      // getAdminNotifications/getUnreadAdminNotificationCount/
+      // markAdminNotificationRead migration — own-inbox only, mirrors the
+      // regular notifications/{id} rule's read posture exactly. The update
+      // clause mirrors users/{uid}'s partial-field-allowlist pattern: only
+      // isRead/readAt may change, and only to true (never used to fake an
+      // unread state back or touch any other field).
+      allow read: if isActiveAdmin() && resource.data.recipientId == request.auth.uid;
+      allow update: if isActiveAdmin()
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt'])
+        && request.resource.data.isRead == true;
+      allow create, delete: if false;
     }
 
     // settings/{docId} — Module 13. Platform-wide feature flags, maintenance
@@ -372,7 +439,11 @@ service cloud.firestore {
     // only once it's a real public shop (status=='approved') — a pending or
     // rejected application is private.
     match /vendors/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || resource.data.status == 'approved');
+      // Admin branch (marketplace.read — adminListVendors checks this same
+      // permission server-side today) bypasses status so pending/rejected
+      // applications remain visible to admins for review.
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || resource.data.status == 'approved' || hasPermission('marketplace.read'));
       allow write: if false;
     }
 

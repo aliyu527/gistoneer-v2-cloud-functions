@@ -1,7 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
-import {toVendorListItem, type AdminVendorListItem} from './adminListVendors';
+import {toVendorListItem, type AdminVendorListItem} from './adminVendorShared';
 
 interface AdminSearchVendorsRequest {
   query: string;

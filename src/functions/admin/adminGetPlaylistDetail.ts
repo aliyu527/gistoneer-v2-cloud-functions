@@ -1,7 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
-import type {AdminPlaylistListItem} from './adminListPlaylists';
+import type {AdminPlaylistListItem} from './adminPlaylistShared';
 
 const CATALOG_SOUND_ID_PREFIX = 'catalog:';
 

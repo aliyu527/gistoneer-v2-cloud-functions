@@ -1,6 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
-import type {AdminUserListItem} from './adminListUsers';
+import type {AdminUserListItem} from './adminUserShared';
 import {requireActiveAdmin} from './requireActiveAdmin';
 
 export interface AdminUserDetail extends AdminUserListItem {

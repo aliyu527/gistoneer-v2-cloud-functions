@@ -3,7 +3,7 @@ import {FieldValue} from 'firebase-admin/firestore';
 import {db} from '../../admin';
 import {requireActiveAdminAny, assertPermission} from './requireActiveAdmin';
 import {writeAuditLog} from './writeAuditLog';
-import type {ModerationStatus} from './adminListContent';
+import type {ModerationStatus} from './adminContentShared';
 
 interface RestoreContentRequest {
   postId: string;

@@ -2,7 +2,7 @@ import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {clampLimit} from '../../lib/pagination';
 import {requireActiveAdmin} from './requireActiveAdmin';
-import {toContentListItem, type AdminContentListItem} from './adminListContent';
+import {toContentListItem, type AdminContentListItem} from './adminContentShared';
 
 interface AdminGetPostsUsingSoundRequest {
   soundId: string;

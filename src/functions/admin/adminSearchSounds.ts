@@ -1,7 +1,7 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../../admin';
 import {requireActiveAdmin} from './requireActiveAdmin';
-import type {AdminSoundListItem} from './adminListSounds';
+import type {AdminSoundListItem} from './adminSoundShared';
 
 interface AdminSearchSoundsRequest {
   query: string;
