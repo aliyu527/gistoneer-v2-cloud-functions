@@ -35,6 +35,24 @@ service cloud.firestore {
       );
     }
 
+    // --- Mobile-write-migration primitive ---
+    // Security Rules can gate WHETHER a write is allowed but can't COMPUTE a
+    // derived field (e.g. buildPublicUrl(storageKey,bucket,region) — see
+    // confirmMediaUpload.ts, which now also stores that same computed
+    // `publicUrl` directly on the mediaUploads doc for exactly this reason).
+    // This checks a claimed artworkUploadId really belongs to the caller,
+    // is a confirmed image upload, and that the write's own artworkUrl/
+    // artworkStoragePath match that upload's own server-computed values
+    // byte-for-byte — never trusting the client to have derived them itself.
+    function verifiedImageUpload(uploadId, claimedUrl, claimedStoragePath) {
+      let upload = get(/databases/$(database)/documents/mediaUploads/$(uploadId)).data;
+      return upload.uid == request.auth.uid
+        && upload.status == 'uploaded'
+        && upload.mediaType == 'image'
+        && claimedUrl == upload.publicUrl
+        && claimedStoragePath == upload.storageKey;
+    }
+
     // users/{uid} — the app's profile document.
     // Server-controlled fields (uid, phoneVerified, emailVerified, authProviders,
     // username, usernameLower, onboardingCompleted, createdAt) are only ever
@@ -134,32 +152,55 @@ service cloud.firestore {
             || hasPermission('analytics.read'));
       allow write: if false;
 
-      // posts/{postId}/comments/{commentId} — Real Home Feed. Entirely
+      // posts/{postId}/comments/{commentId} — Real Home Feed. Still entirely
       // server-written (createComment enforces allowComments and rate
-      // limits before writing); the client never reads this subcollection
-      // directly either — getComments returns it through the Admin SDK,
-      // same "client never touches Firestore directly" posture as every
-      // other collection here.
+      // limits before writing — no rules equivalent, stays a Cloud
+      // Function). getComments/getReplies migration (mobile read
+      // migration): the moderationStatus filter MUST live in this rule, not
+      // a client-side .where() a malicious client could omit — same
+      // get()-with-default pattern as the parent posts/{postId} rule above
+      // (same missing-key throw risk otherwise). postId is a literal path
+      // segment fixed by this subcollection's own location, not a
+      // per-candidate-document wildcard, so the get() below is the same
+      // safe "fixed path for the whole query" shape already established —
+      // not the liveSessions list-analyzer danger.
       match /comments/{commentId} {
-        allow read, write: if false;
+        allow read: if request.auth != null
+          && (resource.data.authorId == request.auth.uid
+              || (!(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])
+                  && (get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid
+                      || get(/databases/$(database)/documents/posts/$(postId)).data.audience == 'public')));
+        allow write: if false;
       }
     }
 
     // postLikes/{uid_postId}, postBookmarks/{uid_postId} — Real Home Feed.
-    // Mirrors templateFavorites' exact posture: entirely server-written
-    // (likePost/unlikePost/bookmarkPost/unbookmarkPost), read only through
-    // the getMyPostInteractions callable, never directly by the client.
+    // Still entirely server-written: likePost/unlikePost/bookmarkPost/
+    // unbookmarkPost all touch posts/{id}.counts.* on a DIFFERENT document
+    // than the one being written here, and Security Rules can't require two
+    // documents be written atomically together — a rule permitting a
+    // non-owner to bump a counter by exactly +1 is real counter-fraud with
+    // nothing tying it to an actual like/bookmark existing. Writes stay
+    // Cloud Functions (see the mobile-write-migration plan's own writeup of
+    // this exact tradeoff). getMyPostInteractions migration: read-only,
+    // self-scoped by construction (doc id is {uid}_{postId}) — no PII, no
+    // counter-fraud surface on a read.
     match /postLikes/{id} {
-      allow read, write: if false;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
     }
     match /postBookmarks/{id} {
-      allow read, write: if false;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
     }
 
     // commentLikes/{uid_commentId} — same posture, one level deeper
-    // (comment-level likes, likeComment/unlikeComment Cloud Functions).
+    // (comment-level likes, likeComment/unlikeComment Cloud Functions stay
+    // server-side for the same counter-fraud reason as postLikes above).
+    // getMyCommentInteractions migration: read-only, self-scoped.
     match /commentLikes/{id} {
-      allow read, write: if false;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
     }
 
     // follows/{followerId_followingId} — the real follow graph. Same
@@ -179,9 +220,17 @@ service cloud.firestore {
     // "owner reads their own doc directly" posture posts/{postId} already
     // uses. The isRead/readAt mutation still only ever happens through
     // markNotificationRead, never a direct client write.
+    // markNotificationRead migration: mirrors the already-shipped
+    // adminNotifications/{id} update rule almost verbatim — own-inbox only,
+    // isRead/readAt allowlist, one-directional (only ever set isRead to
+    // true, never used to fake an unread state back).
     match /notifications/{id} {
       allow read: if request.auth != null && resource.data.recipientId == request.auth.uid;
-      allow write: if false;
+      allow update: if request.auth != null
+        && resource.data.recipientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt'])
+        && request.resource.data.isRead == true;
+      allow create, delete: if false;
     }
 
     // sounds/{soundId} — user-uploaded personal sound library (Music Studio
@@ -214,7 +263,17 @@ service cloud.firestore {
                 && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
             || hasPermission('sounds.read')
             || hasPermission('analytics.read'));
-      allow write: if false;
+      // updateSound migration: owner-only, metadata-field allowlist (never
+      // moderationStatus/source/ownerId/audioUrl — those stay server-only),
+      // artwork only ever set from a verified upload the caller actually
+      // owns (verifiedImageUpload() above), never a client-supplied URL.
+      allow update: if request.auth != null
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['title', 'titleLower', 'artist', 'album', 'genre', 'description', 'visibility', 'artworkUrl', 'artworkStoragePath', 'artworkUploadId', 'updatedAt'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['artworkUrl', 'artworkStoragePath'])
+            || verifiedImageUpload(request.resource.data.artworkUploadId, request.resource.data.artworkUrl, request.resource.data.artworkStoragePath));
+      allow create, delete: if false;
     }
 
     // soundCategories/{id} — admin-managed catalog categories (Trending/
@@ -264,10 +323,21 @@ service cloud.firestore {
 
     // templateUsage/{templateId} — Module 8. Real usage/favorite counters
     // layered onto the mock template catalog's seed numbers (see
-    // functions/src/templates/service.ts) — server-only, same reasoning as
-    // templateFavorites above.
+    // functions/src/templates/service.ts). favoriteCount stays server-only
+    // (favoriteTemplate/unfavoriteTemplate pair it with a templateFavorites
+    // doc — same cross-document counter-fraud gap as postLikes/follows, see
+    // that writeup). recordTemplateUsage migration: usageCount specifically
+    // already has ZERO ownership/rate-limit protection today (fire-and-
+    // forget, any signed-in user, no relationship doc at all) — a rule
+    // reproducing that exact posture for usageCount alone is not a
+    // regression, just not something to also relax for favoriteCount.
     match /templateUsage/{templateId} {
-      allow read, write: if false;
+      allow read: if false;
+      allow create: if request.auth != null && request.resource.data.keys().hasOnly(['usageCount']) && request.resource.data.usageCount == 1;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount'])
+        && request.resource.data.usageCount == (resource.data.get('usageCount', 0)) + 1;
+      allow delete: if false;
     }
 
     // rateLimits/{uid_bucket} — Module 10. Per-uid fixed-window counters
@@ -279,11 +349,20 @@ service cloud.firestore {
     }
 
     // savedSounds/{uid_trackId} — Module 12. Per-user save/unsave of
-    // catalog sounds, mirroring templateFavorites' exact posture: entirely
-    // server-written (saveSound/unsaveSound), read only through the
-    // getSavedSounds callable, never directly by the client.
+    // catalog sounds. saveSound/unsaveSound migration: the cleanest write in
+    // the whole mobile-migration inventory — no counter anywhere touches a
+    // different document (confirmed: sounds/service.ts's saveSound/
+    // unsaveSound only ever write this one doc), so none of the
+    // cross-document counter-fraud reasoning elsewhere in this file applies.
     match /savedSounds/{id} {
-      allow read, write: if false;
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+        && id == request.auth.uid + '_' + request.resource.data.trackId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'trackId', 'createdAt'])
+        && request.resource.data.createdAt == request.time;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if false;
     }
 
     // liveSessions/{liveId} — Gistoneer Live. Entirely server-written:

@@ -1,6 +1,6 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {db} from '../admin';
-import {headObject, deleteObject} from '../lib/s3';
+import {headObject, deleteObject, buildPublicUrl} from '../lib/s3';
 import {MAX_SIZE_BY_TYPE, type MediaType} from '../lib/mediaValidation';
 import {AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY} from '../config';
 
@@ -54,7 +54,12 @@ export const confirmMediaUpload = onCall<ConfirmMediaUploadRequest, Promise<Conf
 
     if (data.status === 'uploaded') {
       // Already confirmed (e.g. a retried call) — return the same result
-      // rather than re-verifying against S3 or erroring.
+      // rather than re-verifying against S3 or erroring. Backfills
+      // publicUrl for uploads confirmed before that field existed, since
+      // the mobile-write migration's rules compare against this field.
+      if (!data.publicUrl) {
+        await docRef.update({publicUrl: buildPublicUrl(data.storageKey, data.bucket, data.region)});
+      }
       return {
         uploadId,
         storageKey: data.storageKey,
@@ -85,7 +90,8 @@ export const confirmMediaUpload = onCall<ConfirmMediaUploadRequest, Promise<Conf
     }
 
     const completedAt = new Date();
-    await docRef.update({status: 'uploaded', completedAt});
+    const publicUrl = buildPublicUrl(data.storageKey, data.bucket, data.region);
+    await docRef.update({status: 'uploaded', completedAt, publicUrl});
 
     return {
       uploadId,
