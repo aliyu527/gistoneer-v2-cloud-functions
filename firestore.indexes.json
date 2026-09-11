@@ -309,6 +309,15 @@
       ]
     },
     {
+      "collectionGroup": "adminAuditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "targetId", "order": "ASCENDING"},
+        {"fieldPath": "targetType", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "posts",
       "queryScope": "COLLECTION",
       "fields": [
