@@ -202,6 +202,14 @@
       ]
     },
     {
+      "collectionGroup": "playlists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "hashtags", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "sounds",
       "queryScope": "COLLECTION",
       "fields": [
@@ -392,6 +400,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         {"fieldPath": "moderationStatus", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "sounds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "hashtags", "arrayConfig": "CONTAINS"},
         {"fieldPath": "createdAt", "order": "DESCENDING"}
       ]
     },
