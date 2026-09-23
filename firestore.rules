@@ -193,6 +193,15 @@ service cloud.firestore {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
+    // postViews/{uid_postId} — same posture as postLikes/postBookmarks
+    // above: recordPostView (api-es6) writes both this doc and
+    // posts/{id}.counts.views together, entirely server-side, for the same
+    // cross-document counter-fraud reason. Once-per-viewer-forever (no
+    // "unview" — the doc is never deleted once created).
+    match /postViews/{id} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
 
     // commentLikes/{uid_commentId} — same posture, one level deeper
     // (comment-level likes, likeComment/unlikeComment Cloud Functions stay
