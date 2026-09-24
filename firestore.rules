@@ -676,13 +676,27 @@ service cloud.firestore {
       // append-only logs, e.g. adminAuditLogs).
       match /messages/{messageId} {
         allow read: if request.auth != null && conversationId.split('_').hasAny([request.auth.uid]);
+        // A message is text, media, or both (a caption) — never neither.
+        // media.url is constrained to this project's own S3 bucket (not an
+        // arbitrary external URL) since, unlike postLikes/hashtagStats, a
+        // message is actual content shown to another real person — a
+        // phishing/tracking link disguised as "an image" is a real (if
+        // minor) abuse vector a private counter never was. This doesn't
+        // re-verify the exact object belongs to this uploadId (that would
+        // need a get() lookup on mediaUploads per message) — it only rules
+        // out hosting content outside our own bucket entirely.
         allow create: if request.auth != null
           && conversationId.split('_').hasAny([request.auth.uid])
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['senderId', 'text', 'media', 'createdAt'])
           && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 2000;
+          && request.resource.data.text.size() <= 2000
+          && (request.resource.data.text.size() > 0 || 'media' in request.resource.data.keys())
+          && (!('media' in request.resource.data.keys())
+              || (request.resource.data.media.keys().hasOnly(['type', 'url', 'thumbnailUrl', 'durationMs'])
+                  && request.resource.data.media.type in ['image', 'video', 'audio']
+                  && request.resource.data.media.url is string
+                  && request.resource.data.media.url.matches('^https://gistoneer-s3-albums[.]s3[.]eu-west-2[.]amazonaws[.]com/.*')));
         allow update, delete: if false;
       }
     }
