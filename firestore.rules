@@ -71,7 +71,7 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['displayName', 'photoURL', 'updatedAt']);
+             .hasOnly(['displayName', 'photoURL', 'updatedAt', 'favoriteHashtags']);
 
       allow delete: if false;
     }
@@ -200,6 +200,17 @@ service cloud.firestore {
     // "unview" — the doc is never deleted once created).
     match /postViews/{id} {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+    // hashtagStats/{tag} — denormalized per-tag usage counter, incremented
+    // server-side (api-es6's recordHashtagUsage) whenever a public post is
+    // created. Unlike postLikes/postViews above, this ISN'T per-user
+    // scoped — it's public aggregate data (how many posts use #tag), so any
+    // signed-in client can read it directly to rank "trending" hashtags,
+    // matching how the Discover screen's other tabs already read their own
+    // collections (sounds, playlists) straight from Firestore.
+    match /hashtagStats/{tag} {
+      allow read: if request.auth != null;
       allow write: if false;
     }
 

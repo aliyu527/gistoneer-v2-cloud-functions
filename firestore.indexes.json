@@ -396,6 +396,15 @@
       ]
     },
     {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "hashtags", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "audience", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "sounds",
       "queryScope": "COLLECTION",
       "fields": [
