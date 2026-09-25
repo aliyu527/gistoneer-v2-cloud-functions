@@ -693,10 +693,23 @@ service cloud.firestore {
           && request.resource.data.text.size() <= 2000
           && (request.resource.data.text.size() > 0 || 'media' in request.resource.data.keys())
           && (!('media' in request.resource.data.keys())
-              || (request.resource.data.media.keys().hasOnly(['type', 'url', 'thumbnailUrl', 'durationMs'])
-                  && request.resource.data.media.type in ['image', 'video', 'audio']
+              || (request.resource.data.media.keys().hasOnly(['type', 'url', 'thumbnailUrl', 'durationMs', 'fileName', 'fileSize'])
+                  && request.resource.data.media.type in ['image', 'video', 'audio', 'document']
                   && request.resource.data.media.url is string
-                  && request.resource.data.media.url.matches('^https://gistoneer-s3-albums[.]s3[.]eu-west-2[.]amazonaws[.]com/.*')));
+                  && request.resource.data.media.url.matches('^https://gistoneer-s3-albums[.]s3[.]eu-west-2[.]amazonaws[.]com/.*')
+                  // Documents carry a filename/size (the bubble needs to show
+                  // them, unlike image/video/audio, which don't) — required
+                  // only for that type so the other three stay exactly as
+                  // strict as before. fileSize is `is number`, not `is int`:
+                  // a JS number can come back non-integral after a JSON
+                  // round-trip, and the client rounds before writing anyway.
+                  && (request.resource.data.media.type != 'document'
+                      || (request.resource.data.media.fileName is string
+                          && request.resource.data.media.fileName.size() > 0
+                          && request.resource.data.media.fileName.size() <= 255
+                          && request.resource.data.media.fileSize is number
+                          && request.resource.data.media.fileSize > 0
+                          && request.resource.data.media.fileSize <= 26214400))));
         allow update, delete: if false;
       }
     }
