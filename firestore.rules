@@ -193,6 +193,21 @@ service cloud.firestore {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
+    // soundLikes/{uid_soundId}, playlistLikes/{uid_playlistId} — same
+    // posture and same counter-fraud reasoning as postLikes above:
+    // likeSound/unlikeSound/likePlaylist/unlikePlaylist (api-es6) touch
+    // sounds/{id}.likeCount or playlists/{id}.likeCount (a different
+    // document) plus the owner's own users/{uid}.totalLikeCount, so writes
+    // stay entirely server-side. Read-only, self-scoped by construction
+    // (doc id is {uid}_{soundId} / {uid}_{playlistId}).
+    match /soundLikes/{id} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+    match /playlistLikes/{id} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
     // postViews/{uid_postId} — same posture as postLikes/postBookmarks
     // above: recordPostView (api-es6) writes both this doc and
     // posts/{id}.counts.views together, entirely server-side, for the same
