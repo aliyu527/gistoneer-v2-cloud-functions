@@ -671,9 +671,10 @@ service cloud.firestore {
 
       allow delete: if false;
 
-      // conversations/{id}/messages/{messageId} — append-only; a message is
-      // never edited or unsent once sent (matches this app's other
-      // append-only logs, e.g. adminAuditLogs).
+      // conversations/{id}/messages/{messageId} — create is append-only
+      // (never touched after the fact), but the sender can later edit
+      // (15-minute window) or delete-for-everyone their own message — see
+      // the allow update rule below the create block.
       match /messages/{messageId} {
         allow read: if request.auth != null && conversationId.split('_').hasAny([request.auth.uid]);
         // A message is text, media, or both (a caption) — never neither.
@@ -710,7 +711,35 @@ service cloud.firestore {
                           && request.resource.data.media.fileSize is number
                           && request.resource.data.media.fileSize > 0
                           && request.resource.data.media.fileSize <= 26214400))));
-        allow update, delete: if false;
+
+        // Edit & Delete (added after the "append-only" comment above was
+        // written — narrowed to the sender's own message only, never a
+        // hard delete). Two disjoint shapes, neither time-limited:
+        //   - Edit: text only (also covers a media message's caption,
+        //     since both live in the same field), message not already
+        //     deleted. get('deleted', false) mirrors liveSessions/{id}/
+        //     messages' own idiom above for the same reason — dot-accessing
+        //     a field older messages predate would throw in the rules
+        //     evaluator.
+        //   - Delete for everyone: redacts the content for real (text
+        //     cleared, media removed via deleteField(), not just a flag
+        //     left next to the old data).
+        allow update: if request.auth != null
+          && conversationId.split('_').hasAny([request.auth.uid])
+          && resource.data.senderId == request.auth.uid
+          && (
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+              && !resource.data.get('deleted', false)
+              && request.resource.data.text is string
+              && request.resource.data.text.size() <= 2000
+              && (('media' in resource.data.keys()) || request.resource.data.text.size() > 0))
+            ||
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'deletedAt', 'text', 'media'])
+              && request.resource.data.deleted == true
+              && request.resource.data.text == ''
+              && !('media' in request.resource.data.keys()))
+          );
+        allow delete: if false;
       }
     }
 
