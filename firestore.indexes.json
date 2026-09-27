@@ -138,6 +138,16 @@
       "collectionGroup": "posts",
       "queryScope": "COLLECTION",
       "fields": [
+        {"fieldPath": "authorId", "order": "ASCENDING"},
+        {"fieldPath": "audience", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [
         {"fieldPath": "status", "order": "ASCENDING"},
         {"fieldPath": "createdAt", "order": "ASCENDING"}
       ]
@@ -565,6 +575,22 @@
       "fields": [
         {"fieldPath": "participantIds", "arrayConfig": "CONTAINS"},
         {"fieldPath": "lastMessageAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "postBookmarks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "postLikes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
       ]
     }
   ],
