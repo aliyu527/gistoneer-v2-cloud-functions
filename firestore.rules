@@ -92,6 +92,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // linkedDevices/{hashOfSecret} — "Switch Account"'s device-link
+    // registry (api-es6 deviceLinkService.js). The doc id IS the HMAC hash
+    // of a bearer secret that mints a fresh session for {uid} on demand —
+    // reading it would only ever expose {uid, createdAt, lastUsedAt}, but
+    // there is no legitimate client read case (the app never looks these
+    // docs up by id) and no client should ever write here at all, so this
+    // stays fully server-only like emailVerifications above.
+    match /linkedDevices/{hash} {
+      allow read, write: if false;
+    }
+
     // suppressedEmails/{email} — addresses Resend reported as bounced/
     // complained (written by the resendWebhook function via Admin SDK).
     // Client access would leak deliverability signals about arbitrary
