@@ -71,7 +71,7 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['displayName', 'photoURL', 'updatedAt', 'favoriteHashtags']);
+             .hasOnly(['displayName', 'photoURL', 'avatarUploadId', 'updatedAt', 'favoriteHashtags']);
 
       allow delete: if false;
     }
