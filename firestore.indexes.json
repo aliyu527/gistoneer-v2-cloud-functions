@@ -315,6 +315,14 @@
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "scheduledDeletionAt", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
         {"fieldPath": "emailVerified", "order": "ASCENDING"},
         {"fieldPath": "createdAt", "order": "DESCENDING"}
       ]

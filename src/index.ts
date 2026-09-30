@@ -16,3 +16,12 @@
 export {resendWebhook} from './functions/resendWebhook';
 export {onMediaGatewayEvent} from './functions/live/onMediaGatewayEvent';
 export {onRecordingEvent} from './functions/live/onRecordingEvent';
+
+/**
+ * Unrelated to the migration above — a genuinely new scheduled function,
+ * the first onSchedule/cron-style function in this codebase. Hard-deletes
+ * accounts whose Delete Account 30-day grace period has passed; see its
+ * own doc comment for the full picture (api-es6 accountLifecycleService.js
+ * owns the request/cancel side).
+ */
+export {purgeScheduledDeletions} from './functions/users/purgeScheduledDeletions';
