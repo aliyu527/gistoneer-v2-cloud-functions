@@ -128,10 +128,33 @@ service cloud.firestore {
     // mentions before writing, which a client-side write could never be
     // trusted to do correctly, so writes are server-only like the
     // collections above. Read access follows the post's own audience field:
-    // 'public' posts are readable by any signed-in user; 'followers'/
-    // 'private' posts are author-only for now since no followers graph
-    // exists yet in this app — a deliberately conservative default (never
-    // leaks a restricted post) rather than a fabricated follower check.
+    // 'public' posts are readable by any signed-in user; 'followers' posts
+    // are readable by the author or a real follower (follows/{id} is now a
+    // real, live collection — the original comment here calling this "no
+    // followers graph exists yet" predates it and was stale); 'private'
+    // stays author-only.
+    //
+    // IMPORTANT, learned the hard way (briefly broke the live Home feed —
+    // deployed, caught via on-device check within minutes, rolled back):
+    // Firestore's rule evaluator can NEVER reference resource.data.<field>
+    // inside a get()/exists() PATH when the rule gates a list/query
+    // request (a plain where()-filtered collection query, e.g. every real
+    // feed/profile-grid read in this app) — only a literal single-document
+    // get(docId) has `resource` concretely bound at evaluation time for
+    // that purpose. The followers-audience exists() check above is safe
+    // ONLY because no client code in this app ever lists 'followers'-
+    // audience posts in bulk — it's reached exclusively through getPost's
+    // single-document fetch (a real deep-link post view). A blocked-viewer
+    // check was attempted here too (`!exists(blocks/{authorId}_{uid})`)
+    // and is exactly what broke the Home feed: that clause is unconditional
+    // (not `||`-guarded the way the followers branch is), so it evaluated —
+    // and threw — for every document in the ordinary public feed query.
+    // Deliberately NOT re-added: blocking still fully prevents following,
+    // commenting, and starting a conversation (enforced server-side/in
+    // those collections' own rules, neither of which are list-query-shaped
+    // the same way), it just doesn't additionally hide a blocked author's
+    // public posts from a general feed/search/grid query — a real,
+    // disclosed scope boundary, not an oversight.
     //
     // Admin Panel Module 05 addition: a 'public' post also stops being
     // readable by anyone but its author once hideContent/removeContent (via
@@ -156,11 +179,15 @@ service cloud.firestore {
       // analytics.read branch (getEngagementSummary/Trend, getContentAnalytics)
       // needs the same bypass — those functions count hidden/removed posts.
       allow read: if request.auth != null
-        && (resource.data.authorId == request.auth.uid
-            || (resource.data.audience == 'public'
-                && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
-            || hasPermission('content.read')
-            || hasPermission('analytics.read'));
+        && (
+          resource.data.authorId == request.auth.uid
+          || (resource.data.audience == 'public'
+              && !(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed']))
+          || (resource.data.audience == 'followers'
+              && exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + resource.data.authorId)))
+          || hasPermission('content.read')
+          || hasPermission('analytics.read')
+        );
       allow write: if false;
 
       // posts/{postId}/comments/{commentId} — Real Home Feed. Still entirely
@@ -180,7 +207,9 @@ service cloud.firestore {
           && (resource.data.authorId == request.auth.uid
               || (!(resource.data.get('moderationStatus', 'active') in ['hidden', 'removed'])
                   && (get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid
-                      || get(/databases/$(database)/documents/posts/$(postId)).data.audience == 'public')));
+                      || get(/databases/$(database)/documents/posts/$(postId)).data.audience == 'public'
+                      || (get(/databases/$(database)/documents/posts/$(postId)).data.audience == 'followers'
+                          && exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + get(/databases/$(database)/documents/posts/$(postId)).data.authorId))))));
         allow write: if false;
       }
     }
@@ -257,6 +286,22 @@ service cloud.firestore {
     // users/{uid} instead (see that match block's own comment) — this
     // collection is just the relationship records themselves.
     match /follows/{id} {
+      allow read, write: if false;
+    }
+
+    // blocks/{blockerId_blockedId} — mirrors follows/{id} exactly: fully
+    // server-only, entirely written by blockUser/unblockUser, never a
+    // broad client read. Checked in three places: an exists() on
+    // conversations/{conversationId}'s create rule below (a block prevents
+    // a new conversation between the two), and server-side (Admin SDK,
+    // bypasses this rule entirely) in followUser and createComment — NOT
+    // on posts/{postId}'s read rule, despite an earlier attempt to add it
+    // there (see that rule's own IMPORTANT comment for exactly why: doing
+    // so referenced resource.data in a get()/exists() path inside a
+    // list-query rule, which briefly broke the live Home feed). A block
+    // also severs any existing follow relationship both ways (see
+    // blockUser's own comment server-side).
+    match /blocks/{id} {
       allow read, write: if false;
     }
 
@@ -682,11 +727,18 @@ service cloud.firestore {
       // list query even though every matching id trivially satisfied it).
       allow read: if request.auth != null && request.auth.uid in resource.data.participantIds;
 
+      // Blocked check: a block between the two participants (either
+      // direction — blocks/{id} doc ids aren't sorted the way
+      // conversationId is, so both orderings need checking) prevents a new
+      // conversation from ever being created, mirroring the same check
+      // posts/{postId}'s read rule makes.
       allow create: if request.auth != null
         && conversationId.split('_').hasAny([request.auth.uid])
         && request.resource.data.participantIds.size() == 2
         && request.resource.data.participantIds.hasAll(conversationId.split('_'))
-        && request.resource.data.lastMessageSenderId == request.auth.uid;
+        && request.resource.data.lastMessageSenderId == request.auth.uid
+        && !exists(/databases/$(database)/documents/blocks/$(conversationId.split('_')[0] + '_' + conversationId.split('_')[1]))
+        && !exists(/databases/$(database)/documents/blocks/$(conversationId.split('_')[1] + '_' + conversationId.split('_')[0]));
 
       allow update: if request.auth != null
         && request.auth.uid in resource.data.participantIds
