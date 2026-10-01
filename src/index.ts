@@ -25,3 +25,12 @@ export {onRecordingEvent} from './functions/live/onRecordingEvent';
  * owns the request/cancel side).
  */
 export {purgeScheduledDeletions} from './functions/users/purgeScheduledDeletions';
+
+/**
+ * Stage 3 (push notifications) — the first Firestore-document trigger
+ * this codebase has ever had. See the function's own doc comment for why
+ * this specific path (chat messages) is the one exception to the
+ * everything-flows-through-api-es6 posture every other notification type
+ * already follows (createNotification.js, inline, no trigger needed).
+ */
+export {onConversationUpdated} from './functions/chat/onConversationUpdated';

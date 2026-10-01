@@ -336,6 +336,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // pushTokens/{uid_deviceId} — Stage 3 (push notifications). Same
+    // fully-server-only posture as deviceSessions right above (deliberately
+    // a SEPARATE collection, not a field added to deviceSessions, so a
+    // future Security-screen schema change and push-delivery internals
+    // never have to share a doc): registered by registerPushToken on every
+    // cold start (api-es6/src/services/users/pushTokenService.js), read by
+    // pushService.js (api-es6) and the chat-message Firestore trigger
+    // (functions/src) — both Admin SDK, never a direct client read/write.
+    match /pushTokens/{id} {
+      allow read, write: if false;
+    }
+
     // notifications/{id} — created inline by likePost/createComment/
     // createPost (never a separate trigger). Unlike the collections above,
     // read directly by the owner rather than through a callable — same
