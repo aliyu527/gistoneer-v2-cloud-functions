@@ -53,6 +53,24 @@ service cloud.firestore {
         && claimedStoragePath == upload.storageKey;
     }
 
+    // --- Group conversations (Stage 2) — live in the SAME conversations
+    // collection as 1:1 chat (see that match block's own comment),
+    // discriminated by a type=='group' field + a random (non-composite)
+    // doc id. 1:1's own messages/{id} rules authorize via
+    // conversationId.split('_') with zero lookups, which structurally
+    // can't work for a group's random id — these two helpers do the
+    // one-time get() instead (Firestore dedupes repeated get() calls to
+    // the same path within one rule evaluation, so calling isGroupMember
+    // more than once per request is still just one real read).
+    function groupConversation(conversationId) {
+      return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+    }
+    function isGroupMember(conversationId) {
+      return request.auth != null
+        && groupConversation(conversationId).type == 'group'
+        && request.auth.uid in groupConversation(conversationId).participantIds;
+    }
+
     // users/{uid} — the app's profile document.
     // Server-controlled fields (uid, phoneVerified, emailVerified, authProviders,
     // username, usernameLower, onboardingCompleted, createdAt) are only ever
@@ -766,12 +784,67 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/blocks/$(conversationId.split('_')[0] + '_' + conversationId.split('_')[1]))
         && !exists(/databases/$(database)/documents/blocks/$(conversationId.split('_')[1] + '_' + conversationId.split('_')[0]));
 
+      // Group create (Stage 2) — entirely additive, the clause above is
+      // untouched. A group conversation's id is a random auto-id (never a
+      // '_'-joined composite key), so this can't collide with the 1:1
+      // create clause's own conversationId.split('_') checks.
+      allow create: if request.auth != null
+        && request.resource.data.type == 'group'
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.participantIds
+        && request.auth.uid in request.resource.data.admins
+        && request.resource.data.participantIds.size() >= 2;
+
+      // `resource.data.get('type','direct') != 'group'` guard added for
+      // Stage 2: without it, this clause's own allowed-key set
+      // (participantIds/participants/.../unreadCount) is a superset of
+      // what a non-admin group member's update touches, which would let
+      // ANY group member forge membership changes on a group doc by
+      // piggybacking on this untouched 1:1 clause — caught by the
+      // rules-emulator test suite, not by inspection. Every existing 1:1
+      // doc has no `type` field at all, so `.get('type','direct')`
+      // defaults to 'direct' for all of them — this guard changes
+      // behavior for group docs only, zero behavior change for any
+      // existing 1:1 conversation.
       allow update: if request.auth != null
+        && resource.data.get('type', 'direct') != 'group'
         && request.auth.uid in resource.data.participantIds
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['participantIds', 'participants', 'lastMessage', 'lastMessageAt', 'lastMessageSenderId', 'unreadCount'])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastMessageSenderId'])
             || request.resource.data.lastMessageSenderId == request.auth.uid);
+
+      // Group update (Stage 2) — three additive clauses, none overlapping
+      // the 1:1 clause above (that one has no type=='group' guard, this
+      // trio requires it, so a 1:1 doc — which has no `type` field at all
+      // — can never satisfy any of them).
+      //   1. Any member, every send: just the message-bookkeeping fields.
+      allow update: if request.auth != null
+        && resource.data.type == 'group'
+        && request.auth.uid in resource.data.participantIds
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['lastMessage', 'lastMessageAt', 'lastMessageSenderId', 'unreadCount'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastMessageSenderId'])
+            || request.resource.data.lastMessageSenderId == request.auth.uid);
+      //   2. An admin: membership/admins/name/photo — also covers an admin
+      //      leaving or removing themselves (checked against admins as it
+      //      stood BEFORE this write).
+      allow update: if request.auth != null
+        && resource.data.type == 'group'
+        && request.auth.uid in resource.data.admins
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['participantIds', 'participants', 'admins', 'name', 'photoURL', 'unreadCount']);
+      //   3. A non-admin member: remove only themself (leave). Proven by
+      //      "was in participantIds, isn't after, and exactly one uid is
+      //      gone" — together that one uid can only be their own. `admins`
+      //      is deliberately excluded here: a non-admin was never in it.
+      allow update: if request.auth != null
+        && resource.data.type == 'group'
+        && request.auth.uid in resource.data.participantIds
+        && !(request.auth.uid in request.resource.data.participantIds)
+        && request.resource.data.participantIds.size() == resource.data.participantIds.size() - 1
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['participantIds', 'participants', 'unreadCount']);
 
       allow delete: if false;
 
@@ -780,7 +853,7 @@ service cloud.firestore {
       // (15-minute window) or delete-for-everyone their own message — see
       // the allow update rule below the create block.
       match /messages/{messageId} {
-        allow read: if request.auth != null && conversationId.split('_').hasAny([request.auth.uid]);
+        allow read: if request.auth != null && (conversationId.split('_').hasAny([request.auth.uid]) || isGroupMember(conversationId));
         // A message is text, media, or both (a caption) — never neither.
         // media.url is constrained to this project's own S3 bucket (not an
         // arbitrary external URL) since, unlike postLikes/hashtagStats, a
@@ -791,7 +864,7 @@ service cloud.firestore {
         // need a get() lookup on mediaUploads per message) — it only rules
         // out hosting content outside our own bucket entirely.
         allow create: if request.auth != null
-          && conversationId.split('_').hasAny([request.auth.uid])
+          && (conversationId.split('_').hasAny([request.auth.uid]) || isGroupMember(conversationId))
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.keys().hasOnly(['senderId', 'text', 'media', 'createdAt'])
           && request.resource.data.text is string
@@ -829,7 +902,7 @@ service cloud.firestore {
         //     cleared, media removed via deleteField(), not just a flag
         //     left next to the old data).
         allow update: if request.auth != null
-          && conversationId.split('_').hasAny([request.auth.uid])
+          && (conversationId.split('_').hasAny([request.auth.uid]) || isGroupMember(conversationId))
           && resource.data.senderId == request.auth.uid
           && (
             (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
