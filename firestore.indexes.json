@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "helpArticles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "section", "order": "ASCENDING"},
+        {"fieldPath": "isActive", "order": "ASCENDING"},
+        {"fieldPath": "sortOrder", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "blocks",
       "queryScope": "COLLECTION",
       "fields": [

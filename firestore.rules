@@ -388,6 +388,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // helpArticles/{articleId} — Settings > Support's Help Center/Safety
+    // Center content. Same posture as soundCategories above: admin-written
+    // only (api-es6 helpArticleService.js, Admin SDK bypasses this rule),
+    // readable by any signed-in user directly — mobile filters to
+    // isActive==true itself rather than the rule trying to express that
+    // (a rule can't safely gate a list query on a non-auth field the way
+    // posts/{postId}'s own IMPORTANT comment already explains for a
+    // different collection).
+    match /helpArticles/{articleId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // soundCategorySlugs/{slug} — uniqueness reservation for category slugs,
     // same fully-server-only shape as usernames/{usernameLower}.
     match /soundCategorySlugs/{slug} {
