@@ -251,8 +251,11 @@ service cloud.firestore {
     // postViews/{uid_postId} — same posture as postLikes/postBookmarks
     // above: recordPostView (api-es6) writes both this doc and
     // posts/{id}.counts.views together, entirely server-side, for the same
-    // cross-document counter-fraud reason. Once-per-viewer-forever (no
-    // "unview" — the doc is never deleted once created).
+    // cross-document counter-fraud reason. Once-per-viewer-forever from the
+    // client's perspective (no client "unview") — Settings > Watch
+    // History's "Clear" does bulk-delete these server-side
+    // (postInteractions.js's clearWatchHistory), but deliberately leaves
+    // posts/{id}.counts.views untouched (see that function's own comment).
     match /postViews/{id} {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
       allow write: if false;
