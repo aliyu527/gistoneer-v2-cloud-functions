@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "blocks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "blockerId", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "admins",
       "queryScope": "COLLECTION",
       "fields": [
@@ -191,6 +199,23 @@
       "queryScope": "COLLECTION",
       "fields": [
         {"fieldPath": "recipientId", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "deviceSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "lastActiveAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "recipientId", "order": "ASCENDING"},
+        {"fieldPath": "type", "order": "ASCENDING"},
         {"fieldPath": "createdAt", "order": "DESCENDING"}
       ]
     },

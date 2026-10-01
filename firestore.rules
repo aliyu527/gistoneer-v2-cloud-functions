@@ -305,6 +305,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // deviceSessions/{uid_deviceId} — Settings > Security's "Manage
+    // devices"/"Security alerts". Same fully-server-only posture as
+    // blocks/follows above: recorded by recordDeviceSession on every cold
+    // start, read by getDeviceSessions, pruned by logoutOtherDevices — all
+    // Admin SDK, all api-es6/src/services/users/deviceSessionService.js,
+    // never a direct client read/write.
+    match /deviceSessions/{id} {
+      allow read, write: if false;
+    }
+
     // notifications/{id} — created inline by likePost/createComment/
     // createPost (never a separate trigger). Unlike the collections above,
     // read directly by the owner rather than through a callable — same
