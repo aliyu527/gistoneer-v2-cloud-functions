@@ -621,6 +621,24 @@ service cloud.firestore {
       }
     }
 
+    // calls/{callId} — Stage 4 (1:1 voice/video calls). Same ephemeral-
+    // session posture as liveSessions, but with exactly two symmetric
+    // participants and no audience/subcollections at all. Server-created
+    // only (api-es6/src/services/calls/callService.js via the Admin SDK,
+    // which bypasses this rule — the real enforcement of who can call whom
+    // lives there, e.g. the isBlocked() check). Unlike liveSessions this
+    // needs no get/list split: the only list query this collection ever
+    // sees (useIncomingCall's where('calleeId','==',uid)) pre-filters on
+    // exactly the field this rule's OR already checks, so the list-query
+    // safety analyzer can prove every result satisfies it directly — no
+    // exists() call here to trip that analyzer up the way liveSessions'
+    // invited-subcollection check did.
+    match /calls/{callId} {
+      allow read: if request.auth != null
+        && (resource.data.callerId == request.auth.uid || resource.data.calleeId == request.auth.uid);
+      allow write: if false;
+    }
+
     // adminAuditLogs/{id} — Module 04. Records of admin actions (suspend/
     // unsuspend a user, etc.), written by writeAuditLog() via the Admin SDK.
     // adminListAuditLogs/adminGetAuditLogDetail migration: audit.read is the

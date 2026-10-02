@@ -629,6 +629,14 @@
       ]
     },
     {
+      "collectionGroup": "calls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "calleeId", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "postBookmarks",
       "queryScope": "COLLECTION",
       "fields": [
